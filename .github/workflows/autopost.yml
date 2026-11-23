@@ -1,9 +1,11 @@
 name: Auto-post GTA 6 Reel
 
 on:
-  schedule:
-    # Times are UTC. These = 11:37, 15:37, 19:37, 22:37 India time (IST).
-    - cron: "7 6,10,14,17 * * *"
+  # Automatic schedule is OFF because the PC runner (START_HERE.bat) does the posting.
+  # To use GitHub instead of the PC, add the IG secrets and uncomment these lines.
+  # (Times are UTC: 11:37, 15:37, 19:37, 22:37 India time.)
+  # schedule:
+  #   - cron: "7 6,10,14,17 * * *"
   workflow_dispatch:
     inputs:
       dry_run:
