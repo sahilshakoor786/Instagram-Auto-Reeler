@@ -1,0 +1,2 @@
+# macOS / Linux: crontab -e, then add (adjust the path). Posts only when a slot in config.yaml is due.
+*/15 * * * * cd /path/to/Instagram-Auto-Reeler && .venv/bin/python -m reeler post >> .reeler/cron.log 2>&1

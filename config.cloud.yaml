@@ -1,0 +1,41 @@
+# Cloud mode (GitHub Actions). Clips come from Google Drive; posting history lives in state/state.db.
+# Posting times are set by the cron lines in .github/workflows/autopost.yml.
+
+drive:
+  folder: "https://drive.google.com/drive/folders/1f1X03l5Xg80wq-fnJOz0RWbk0SiTf68k"
+  manifest: drive_manifest.json      # snapshot of the folder; new uploads are picked up automatically too
+
+uploader: graph
+order: random
+videos_dir: ./.cache/videos          # temporary downloads on the runner
+work_dir: ./.cache/work
+state_file: ./state/state.db         # committed back to the repo after every run
+after_post: delete
+
+schedule:
+  timezone: Asia/Kolkata
+  post_times: ["11:30", "15:30", "19:30", "22:30"]
+  max_posts_per_day: 4
+  min_gap_minutes: 120
+
+video:
+  fit: blur
+  hook_text: true
+  watermark: ""                      # e.g. "@yourhandle"
+
+caption:
+  max_hashtags: 5
+  signature: ""                      # e.g. "Follow for daily GTA 6 clips 🎮"
+
+ai:
+  enabled: true
+  model: claude-opus-5-5
+  effort: low
+
+audio:
+  mode: trending
+  audio_volume: 35
+  video_volume: 70
+
+trends:
+  live_research: true

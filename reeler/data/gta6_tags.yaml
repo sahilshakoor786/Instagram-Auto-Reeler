@@ -1,0 +1,39 @@
+# Seed hashtag pool for GTA 6 clips.
+# `weight` is a prior (0-1) for how broad/popular a tag is. Live research (Instagram
+# Graph API hashtag search) re-scores these and discovers new co-trending tags.
+# Edit freely - the system picks a mix of broad + category + niche tags per clip.
+
+broad:            # huge reach, always relevant
+  gta6: 1.0
+  gtavi: 0.8
+  grandtheftauto6: 0.75
+  gta: 0.7
+  rockstargames: 0.65
+  gaming: 0.6
+  gamingclips: 0.55
+
+niche:            # smaller, less competition, very on-topic
+  vicecity: 0.7
+  leonida: 0.55
+  gta6gameplay: 0.65
+  gta6clips: 0.55
+  gta6reels: 0.5
+  luciaandjason: 0.45
+  gta6community: 0.45
+  gtaclips: 0.5
+
+categories:       # matched to what the AI sees in the clip
+  car_chase:   {policechase: 0.6, carchase: 0.55, gta6cars: 0.5, highspeedchase: 0.4}
+  shootout:    {gta6action: 0.55, shootout: 0.45, actiongaming: 0.4}
+  heist:       {gta6heist: 0.55, heist: 0.45, bankrobbery: 0.4}
+  stunt:       {gta6stunts: 0.55, gtastunts: 0.5, stunts: 0.45, insanestunts: 0.35}
+  open_world:  {openworld: 0.5, openworldgames: 0.45, gta6map: 0.45}
+  scenery:     {gta6graphics: 0.6, nextgengraphics: 0.4, virtualphotography: 0.4, gamingphotography: 0.35}
+  nightlife:   {vicecitynights: 0.4, neonnights: 0.35, gta6graphics: 0.5}
+  funny:       {gtafunny: 0.55, gamingfails: 0.5, funnygaming: 0.45, gtafails: 0.45}
+  police:      {gta6police: 0.5, wantedlevel: 0.35, policechase: 0.55}
+  vehicles:    {gta6cars: 0.55, supercars: 0.45, carsofinstagram: 0.4}
+  boats_air:   {gta6boats: 0.4, gta6planes: 0.4, jetski: 0.3}
+  character:   {gta6lucia: 0.45, gta6jason: 0.45, gta6characters: 0.4}
+  beach:       {vicebeach: 0.4, gta6beach: 0.4, miamivibes: 0.35}
+  other:       {gamingcommunity: 0.4, ps5: 0.5, ps5games: 0.4, xboxseriesx: 0.35}
