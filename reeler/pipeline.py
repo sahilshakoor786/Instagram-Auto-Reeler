@@ -160,9 +160,18 @@ class Reeler:
         analysis = json.loads(row["analysis"] or "{}")
 
         audio = None
-        if cfg.audio.mode == "trending" and uploader.supports_trending_audio and self.graph is not None:
+        if cfg.audio.mode == "trending" and uploader.supports_trending_audio:
             used = recently_used_audio(self.state.last_posted(int(cfg.audio.avoid_repeat_posts)))
-            audio = pick_trending_audio(self.graph, cfg, analysis.get("music_search_terms", []), used)
+            terms = analysis.get("music_search_terms", [])
+            if hasattr(uploader, "pick_audio"):  # app-login uploader: Instagram's in-app music catalog
+                try:
+                    choice, track = uploader.pick_audio(terms, used)
+                    if choice:
+                        audio = dict(choice, _track=track)
+                except Exception as exc:  # noqa: BLE001 - music is optional
+                    log.warning("could not pick trending music: %s", exc)
+            elif self.graph is not None:
+                audio = pick_trending_audio(self.graph, cfg, terms, used)
 
         self.state.update(vid, status="posting", attempts=row["attempts"] + 1)
         try:

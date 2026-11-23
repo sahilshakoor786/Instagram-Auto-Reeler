@@ -302,6 +302,69 @@ def cmd_cloud_post(args) -> int:
     return 0
 
 
+def _save_env(cfg, key: str, value: str) -> None:
+    env = cfg.root / ".env"
+    lines = env.read_text(encoding="utf-8").splitlines() if env.exists() else []
+    lines = [ln for ln in lines if not ln.startswith(f"{key}=")] + [f"{key}={value}"]
+    env.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def cmd_pc_run(args) -> int:
+    """Run on your own PC: log in to Instagram once, then post clips from Google Drive on schedule."""
+    import getpass
+
+    cfg, app = _app(args)
+    media.require_ffmpeg()
+    s = cfg.secrets
+    if cfg.uploader == "instagrapi" and not (s.ig_username and s.ig_password):
+        _p("\n=== One-time Instagram login (saved only on this PC, in the .env file) ===")
+        s.ig_username = input("Instagram username: ").strip().lstrip("@")
+        s.ig_password = getpass.getpass("Instagram password (hidden while typing): ")
+        _save_env(cfg, "IG_USERNAME", s.ig_username)
+        _save_env(cfg, "IG_PASSWORD", s.ig_password)
+    uploader = _uploader(cfg)
+    _p(f"Logged in as {uploader.check()}")
+
+    from reeler.scheduler import get_tz, next_slot
+    tz = get_tz(cfg.schedule.timezone)
+
+    def one(ignore_cap: bool) -> bool:
+        try:
+            res = app.cloud_post(uploader, ignore_cap=ignore_cap)
+        except Exception as exc:  # noqa: BLE001
+            _p(f"  post failed: {exc}")
+            return True
+        if "skipped" in res:
+            _p(f"  nothing posted: {res['skipped']}")
+            return "already posted" not in res["skipped"]
+        _p(f"  POSTED {res['file']} -> {res.get('permalink') or res.get('media_id')}  ({res['remaining']} left)")
+        if res.get("audio"):
+            _p(f"  music: {res['audio'].get('label')}")
+        for n in res.get("notes", []):
+            _p(f"  note: {n}")
+        return True
+
+    for i in range(max(0, args.now)):
+        _p(f"[{datetime.now(tz):%H:%M}] posting now ({i + 1}/{args.now})")
+        if not one(ignore_cap=True):
+            return 0
+        if i < args.now - 1:
+            time.sleep(max(1.0, args.gap_minutes) * 60)
+
+    _p(f"\nAutopilot on: {len(cfg.schedule.post_times)} Reels/day at {', '.join(cfg.schedule.post_times)} "
+       f"({cfg.schedule.timezone}). Keep this window open. Ctrl+C to stop.")
+    while True:
+        times = [datetime.fromtimestamp(r["posted_at"], tz) for r in app.state.posted_since(time.time() - 2 * 86400)]
+        slot = next_slot(datetime.now(tz), cfg.schedule, times)
+        _p(f"[{datetime.now(tz):%H:%M}] next Reel at {slot:%a %H:%M}")
+        while (wait := (slot - datetime.now(tz)).total_seconds()) > 0:
+            time.sleep(min(wait, 300))
+        if not one(ignore_cap=False):
+            _p("All clips are posted. Add more to the Drive folder and restart.")
+            return 0
+        time.sleep(60)
+
+
 def cmd_refresh_token(args) -> int:
     from reeler.graph import GraphClient
     cfg = load_config(args.config)
@@ -380,6 +443,12 @@ def build_parser() -> argparse.ArgumentParser:
     cp.add_argument("--count", type=int, default=1, help="post this many clips in one run (bulk mode)")
     cp.add_argument("--gap-minutes", type=float, default=2, help="pause between posts in bulk mode")
     cp.set_defaults(fn=cmd_cloud_post)
+
+    pc = sub.add_parser("pc-run", help="run on your PC: Drive folder -> Instagram, on schedule")
+    pc.add_argument("--now", type=int, default=1, help="post this many right away before the schedule starts")
+    pc.add_argument("--gap-minutes", type=float, default=20, help="pause between the --now posts")
+    pc.add_argument("--dry-run", action="store_true")
+    pc.set_defaults(fn=cmd_pc_run)
 
     sub.add_parser("refresh-token", help="exchange/refresh the Instagram access token (~60 days)") \
         .set_defaults(fn=cmd_refresh_token)

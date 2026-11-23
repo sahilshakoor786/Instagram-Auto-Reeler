@@ -1,0 +1,37 @@
+# Run on your own PC with START_HERE.bat. Logs in to Instagram directly (no Facebook needed).
+
+drive:
+  folder: "https://drive.google.com/drive/folders/1f1X03l5Xg80wq-fnJOz0RWbk0SiTf68k"
+  manifest: drive_manifest.json
+
+uploader: instagrapi
+order: random
+videos_dir: ./.cache/videos
+work_dir: ./.reeler
+state_file: ./.reeler/pc_state.db
+after_post: delete
+
+schedule:
+  timezone: Asia/Kolkata
+  post_times: ["10:30", "13:30", "16:30", "19:30", "22:00"]   # 5 Reels/day -> 146 clips in ~30 days
+  jitter_minutes: 12
+  max_posts_per_day: 5
+  min_gap_minutes: 90
+
+video:
+  fit: blur
+  hook_text: true
+  watermark: ""
+
+caption:
+  max_hashtags: 5
+  signature: ""
+
+ai:
+  enabled: true           # add ANTHROPIC_API_KEY=... to .env for AI captions (optional)
+
+audio:
+  mode: trending          # attaches a trending Instagram song to every Reel
+
+trends:
+  live_research: false

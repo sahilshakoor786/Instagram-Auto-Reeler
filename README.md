@@ -37,6 +37,20 @@ weekly budget (25 by default), so it never goes over that limit.
 
 ---
 
+## 🖥️ Easiest: run it on your Windows PC (no Facebook needed)
+
+1. Download the project: on GitHub, open **Code → Download ZIP**, then unzip it (for example to `Documents\Instagram-Auto-Reeler`).
+2. Double-click **`START_HERE.bat`**.
+   - The first time, it installs Python and ffmpeg. When it says so, close the window and double-click the file again.
+3. Type your Instagram username and password when asked. They are saved only on your PC, in `.env`.
+   If Instagram sends you a security code, type it into the window.
+4. Choose how many Reels to post right away. After that it keeps posting **5 a day** from your Google Drive
+   folder, with a trending Instagram song, a hook text overlay, a caption and 5 hashtags, until all clips
+   are posted. Leave the window open; if you close it, double-click `START_HERE.bat` to pick up where it stopped.
+
+To change the posting times or how many Reels go out per day, edit `config.pc.yaml`.
+This mode logs in like the Instagram app does (unofficial). Keep the pace human.
+
 ## ☁️ Cloud mode: post from Google Drive with no PC needed
 
 GitHub Actions runs `.github/workflows/autopost.yml` 4 times a day. Each run:
