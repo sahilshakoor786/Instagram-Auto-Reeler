@@ -10,6 +10,10 @@ on:
         description: "Dry run (render + caption only, nothing uploaded)"
         type: boolean
         default: true
+      count:
+        description: "How many Reels to post in this run (bulk). Instagram allows max ~100 per 24h."
+        type: number
+        default: 1
 
 permissions:
   contents: write
@@ -21,7 +25,7 @@ concurrency:
 jobs:
   post:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 340
     steps:
       - uses: actions/checkout@v4
 
@@ -42,7 +46,8 @@ jobs:
           IG_ACCESS_TOKEN: ${{ secrets.IG_ACCESS_TOKEN }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
-        run: python -m reeler -c config.cloud.yaml cloud-post ${{ inputs.dry_run && '--dry-run' || '' }}
+        run: python -m reeler -c config.cloud.yaml cloud-post --count ${{ inputs.count || 1 }} ${{ inputs.dry_run && '--dry-run' || '' }}
+
 
       - name: Upload preview (dry run)
         if: ${{ inputs.dry_run }}

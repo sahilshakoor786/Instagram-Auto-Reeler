@@ -279,17 +279,26 @@ def cmd_cloud_post(args) -> int:
         _p("Set drive.folder in the config first.")
         return 1
     media.require_ffmpeg()
-    res = app.cloud_post(_uploader(cfg))
-    if "skipped" in res:
-        _p(f"Nothing posted: {res['skipped']}")
-        return 0
-    _p(f"Posted {res['file']} -> {res.get('permalink') or res.get('media_id')}  ({res['remaining']} clips left)")
-    if res.get("audio"):
-        _p(f"  trending audio: {res['audio'].get('label')}")
-    for n in res.get("notes", []):
-        _p(f"  note: {n}")
-    row = app.state.get(res["id"])
-    _p("\nCaption:\n" + (row["caption"] or ""))
+    uploader = _uploader(cfg)
+    count = max(1, args.count)
+    posted = 0
+    for i in range(count):
+        res = app.cloud_post(uploader, ignore_cap=count > 1)
+        if "skipped" in res:
+            _p(f"Nothing posted: {res['skipped']}")
+            break
+        posted += 1
+        _p(f"[{posted}/{count}] Posted {res['file']} -> {res.get('permalink') or res.get('media_id')}"
+           f"  ({res['remaining']} clips left)")
+        if res.get("audio"):
+            _p(f"  trending audio: {res['audio'].get('label')}")
+        for n in res.get("notes", []):
+            _p(f"  note: {n}")
+        row = app.state.get(res["id"])
+        _p("  " + (row["caption"] or "").replace("\n", "\n  "))
+        if i < count - 1 and uploader.name != "dry-run":
+            time.sleep(max(0, args.gap_minutes) * 60)
+    _p(f"\nDone: {posted} Reel(s) posted this run.")
     return 0
 
 
@@ -368,6 +377,8 @@ def build_parser() -> argparse.ArgumentParser:
 
     cp = sub.add_parser("cloud-post", help="cloud mode: post the next clip from the Google Drive folder")
     cp.add_argument("--dry-run", action="store_true")
+    cp.add_argument("--count", type=int, default=1, help="post this many clips in one run (bulk mode)")
+    cp.add_argument("--gap-minutes", type=float, default=2, help="pause between posts in bulk mode")
     cp.set_defaults(fn=cmd_cloud_post)
 
     sub.add_parser("refresh-token", help="exchange/refresh the Instagram access token (~60 days)") \
