@@ -30,7 +30,7 @@ if not exist .venv\Scripts\python.exe (
   py -3 -m venv .venv
 )
 .venv\Scripts\python -m pip install -q --upgrade pip
-.venv\Scripts\python -m pip install -q -r requirements.txt "instagrapi[video]"
+.venv\Scripts\python -m pip install -q -r requirements.txt "instagrapi[video]" playwright
 .venv\Scripts\python -m pip install -q --no-deps "moviepy==2.2.1"
 
 set /p NOW="How many Reels should I post RIGHT NOW before the daily schedule starts? (e.g. 1): "

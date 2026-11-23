@@ -573,3 +573,39 @@ def test_instagrapi_sessionid_login(tmp_path, monkeypatch):
     assert seen["sid"] == "123:abc:9"                      # URL-decoded browser cookie
     assert seen["device"]["app_version"] == mod.InstagrapiUploader.APP_VERSION["app_version"]
     assert saved == ["123%3Aabc%3A9"] and up._logged_in
+
+
+def test_browser_login_reads_cookie_after_login(tmp_path):
+    pytest.importorskip("playwright")
+    import http.server
+    import threading
+
+    from reeler.browser_login import grab_session_cookie
+
+    chrome = "/opt/pw-browsers/chromium-1243/chrome-linux64/chrome"
+    if not Path(chrome).exists():
+        pytest.skip("no local chromium")
+
+    class H(http.server.BaseHTTPRequestHandler):
+        def log_message(self, *a):
+            pass
+
+        def do_GET(self):
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html")
+            if self.path.startswith("/login-done"):
+                self.send_header("Set-Cookie", "sessionid=4242%3Aabc%3A1; Path=/")
+                body = b"logged in"
+            else:  # login page: 'user' submits after a moment
+                body = b"<script>setTimeout(()=>location='/login-done',800)</script>login form"
+            self.end_headers()
+            self.wfile.write(body)
+
+    srv = http.server.HTTPServer(("127.0.0.1", 0), H)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    try:
+        sid = grab_session_cookie(tmp_path / "prof", url=f"http://127.0.0.1:{srv.server_port}/",
+                                  domain_hint="127.0.0.1", timeout_s=30, executable_path=chrome, headless=True)
+    finally:
+        srv.shutdown()
+    assert sid == "4242%3Aabc%3A1"
