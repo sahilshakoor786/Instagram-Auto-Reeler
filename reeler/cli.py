@@ -315,14 +315,9 @@ def cmd_pc_run(args) -> int:
 
     cfg, app = _app(args)
     media.require_ffmpeg()
-    s = cfg.secrets
-    if cfg.uploader == "instagrapi" and not (s.ig_username and s.ig_password):
-        _p("\n=== One-time Instagram login (saved only on this PC, in the .env file) ===")
-        s.ig_username = input("Instagram username: ").strip().lstrip("@")
-        s.ig_password = getpass.getpass("Instagram password (hidden while typing): ")
-        _save_env(cfg, "IG_USERNAME", s.ig_username)
-        _save_env(cfg, "IG_PASSWORD", s.ig_password)
     uploader = _uploader(cfg)
+    if hasattr(uploader, "on_new_sessionid"):
+        uploader.on_new_sessionid = lambda sid: _save_env(cfg, "IG_SESSIONID", sid)
     _p(f"Logged in as {uploader.check()}")
 
     from reeler.scheduler import get_tz, next_slot
