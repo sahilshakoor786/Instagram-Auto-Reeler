@@ -218,7 +218,7 @@ class Reeler:
 
 
     # ---- cloud mode: Google Drive folder -> one Reel per run ---------------
-    def cloud_post(self, uploader, *, now_ts: float | None = None) -> dict:
+    def cloud_post(self, uploader, *, now_ts: float | None = None, ignore_cap: bool = False) -> dict:
         """Pick the next un-posted clip from Drive, download only that one, post it."""
         from reeler import gdrive
         from reeler.scheduler import get_tz
@@ -230,7 +230,7 @@ class Reeler:
         today = datetime.fromtimestamp(now_ts, tz).date()
         posted = self.state.posted_since(now_ts - 2 * 86400)
         today_count = sum(1 for r in posted if datetime.fromtimestamp(r["posted_at"], tz).date() == today)
-        if uploader.name != "dry-run":
+        if uploader.name != "dry-run" and not ignore_cap:
             if today_count >= int(cfg.schedule.max_posts_per_day):
                 return {"skipped": f"daily cap reached ({today_count} today)"}
             if posted and now_ts - posted[-1]["posted_at"] < int(cfg.schedule.min_gap_minutes) * 60:
