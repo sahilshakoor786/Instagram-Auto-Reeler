@@ -344,7 +344,9 @@ def cmd_pc_run(args) -> int:
         if not one(ignore_cap=True):
             return 0
         if i < args.now - 1:
-            time.sleep(max(1.0, args.gap_minutes) * 60)
+            gap = max(1.0, args.gap_minutes)
+            _p(f"  waiting {gap:.0f} min before the next one (spacing posts out keeps the account safe)...")
+            time.sleep(gap * 60)
 
     _p(f"\nAutopilot on: {len(cfg.schedule.post_times)} Reels/day at {', '.join(cfg.schedule.post_times)} "
        f"({cfg.schedule.timezone}). Keep this window open. Ctrl+C to stop.")
