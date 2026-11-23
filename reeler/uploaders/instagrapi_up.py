@@ -118,7 +118,25 @@ class InstagrapiUploader(Uploader):
             except Exception as exc:  # noqa: BLE001
                 print(f"\nPassword login was refused by Instagram ({exc}).")
 
-        # 4. ask for the browser session id
+        # 4. open a login window: user logs in normally, we read the session automatically
+        try:
+            from reeler.browser_login import grab_session_cookie
+
+            print("\nA browser window is opening. Log in to Instagram there like normal")
+            print("(type the security code there too if Instagram asks). This window continues by itself.\n")
+            sid = grab_session_cookie(self.cfg.work_path / "browser-profile")
+            self._login_sessionid(sid)
+            s.ig_sessionid = sid
+            if self.on_new_sessionid:
+                self.on_new_sessionid(sid)
+            print("Instagram login captured. You can close the browser window.")
+            return
+        except Exception as exc:  # noqa: BLE001 - fall back to manual paste
+            print(f"\nAutomatic browser login didn't work ({exc}).")
+            self.cl = type(self.cl)()
+            self.cl.delay_range = [2, 5]
+
+        # 5. last resort: paste the browser session id by hand
         print(SESSIONID_HELP)
         for attempt in range(3):
             sid = getpass.getpass("Paste your sessionid here (hidden) and press Enter: ")
