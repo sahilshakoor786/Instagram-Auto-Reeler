@@ -463,3 +463,10 @@ def test_cloud_post_cycles_through_drive(tmp_path, monkeypatch):
     done = app.state.kv_get("drive_done")
     assert done["ID_A"] == "posted" and done["ID_B"] == "posted"
     assert app.state.kv_get("drive_fail").get("ID_BAD", 0) >= 1
+
+
+def test_graph_host_autodetect_from_token():
+    from reeler.graph import GraphClient
+    assert GraphClient("1", "IGAAxyz").host == "graph.instagram.com"
+    assert GraphClient("1", "EAAxyz", host="graph.instagram.com").host == "graph.facebook.com"
+    assert GraphClient("1", " IGAAxyz \n").token == "IGAAxyz"
