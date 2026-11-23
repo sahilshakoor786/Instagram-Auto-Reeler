@@ -1,0 +1,61 @@
+# Instagram Auto Reeler - settings. Secrets (tokens/passwords) go in .env, not here.
+
+videos_dir: ./videos          # put your GTA 6 clips here (sub-folders are fine)
+work_dir: ./.reeler           # database, rendered reels, frames
+uploader: graph               # graph (official, recommended) | instagrapi (unofficial) | dry-run
+order: random                 # name | oldest | newest | random
+after_post: move              # move (to posted_dir) | keep | delete
+posted_dir: ./videos/posted
+
+schedule:
+  timezone: local             # or e.g. Asia/Kolkata, America/New_York
+  post_times: ["11:00", "15:00", "19:00", "22:00"]   # one Reel per slot
+  jitter_minutes: 12          # +/- random-looking offset so posts aren't robotic
+  max_posts_per_day: 4
+  min_gap_minutes: 120
+
+video:
+  width: 1080
+  height: 1920
+  fps: 30
+  fit: blur                   # blur = full gameplay on blurred background | crop = fill screen | pad = black bars
+  max_duration: 90
+  crf: 20                     # lower = higher quality, bigger file
+  hook_text: true             # bold on-screen hook in the first seconds ("WAIT FOR THE ENDING")
+  hook_seconds: 2.5
+  font_file: ""               # auto-detect (Impact/Arial Bold); set a .ttf path to override
+  watermark: ""               # e.g. "@yourhandle"
+  cover_from_ai: true         # AI picks the most eye-catching frame as cover
+
+caption:
+  max_hashtags: 5             # Instagram now limits posts to 5 hashtags
+  add_cta: true               # adds a comment-bait question
+  signature: ""               # e.g. "Follow @yourhandle for daily GTA 6 clips 🎮"
+  emoji: true
+  language: English
+
+ai:
+  enabled: true               # needs ANTHROPIC_API_KEY; falls back to offline captions otherwise
+  model: claude-opus-5-5
+  effort: low                 # low is plenty for captioning; raise to medium/high for better copy
+  frames: 6                   # keyframes sent per clip
+  use_fallbacks: true
+  niche: "GTA 6 (Grand Theft Auto VI) gameplay clips"
+
+audio:
+  mode: trending              # trending = attach a trending Instagram track | off = keep game audio
+  audio_type: music           # music | original_sound
+  audio_volume: 35            # 1-100 (added track)
+  video_volume: 70            # 1-100 (game audio)
+  avoid_repeat_posts: 6       # don't reuse a track within the last N posts
+  original_audio_name: ""     # with mode=off: rename the game audio (e.g. "GTA 6 gameplay")
+
+trends:
+  live_research: true         # score hashtags from live Instagram data (top/recent GTA 6 posts)
+  refresh_hours: 24
+  weekly_query_budget: 25     # Instagram allows 30 unique hashtag lookups per 7 days
+
+graph:
+  host: graph.facebook.com    # graph.instagram.com if your token is from "Instagram Login"
+  version: v25.0
+  share_to_feed: true

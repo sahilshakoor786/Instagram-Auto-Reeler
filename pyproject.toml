@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "instagram-auto-reeler"
+version = "1.0.0"
+description = "Auto-post a folder of gameplay clips as trend-aware Instagram Reels"
+requires-python = ">=3.10"
+dependencies = [
+  "anthropic>=2.12",
+  "requests>=2.31",
+  "PyYAML>=6.0",
+  "python-dotenv>=1.0",
+  "tzdata>=2024.1; sys_platform == 'win32'",
+]
+
+[project.optional-dependencies]
+instagrapi = ["instagrapi>=2.1"]
+dev = ["pytest>=8"]
+
+[project.scripts]
+reeler = "reeler.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["reeler*"]
+
+[tool.setuptools.package-data]
+reeler = ["data/*.yaml"]
