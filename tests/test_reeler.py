@@ -470,3 +470,65 @@ def test_graph_host_autodetect_from_token():
     assert GraphClient("1", "IGAAxyz").host == "graph.instagram.com"
     assert GraphClient("1", "EAAxyz", host="graph.instagram.com").host == "graph.facebook.com"
     assert GraphClient("1", " IGAAxyz \n").token == "IGAAxyz"
+
+
+# ---------------------------------------------------------------- app-login (instagrapi) uploader
+def _fake_ig(tmp_path, music_fails=False):
+    pytest.importorskip("instagrapi")
+    from instagrapi.types import Track
+    from reeler.uploaders.instagrapi_up import InstagrapiUploader
+
+    cfg = make_cfg(tmp_path, uploader="instagrapi")
+    up = InstagrapiUploader(cfg)
+    up._logged_in = True
+
+    class Media:
+        pk, code = 123, "ABC"
+
+    def tr(i, title):
+        return Track(id=str(i), title=title, subtitle="", display_artist="DJ", audio_cluster_id=str(i),
+                     uri=f"https://x/{i}.m4a", highlight_start_times_in_ms=[1000], is_explicit=False,
+                     dash_manifest="", has_lyrics=False, audio_asset_id=str(i), duration_in_ms=30000,
+                     allows_saving=True, territory_validity_periods={})
+
+    class FakeCl:
+        calls = []
+
+        def music_trending(self):
+            # real responses are loosely shaped; the second item is missing most fields on purpose
+            return {"items": [{"track": tr(1, "Hot").model_dump()},
+                              {"track": {"audio_asset_id": "2", "title": "Hotter", "uri": "https://x/2.m4a"}}]}
+
+        def search_music(self, q):
+            return [tr(3, f"{q} beat")]
+
+        def clip_upload_as_reel_with_music(self, path, caption, track):
+            FakeCl.calls.append(("music", track.id))
+            if music_fails:
+                raise RuntimeError("boom")
+            return Media()
+
+        def clip_upload(self, path, caption, thumbnail=None):
+            FakeCl.calls.append(("plain", None))
+            return Media()
+
+    up.cl = FakeCl()
+    return up, FakeCl
+
+
+def test_instagrapi_trending_music_and_upload(tmp_path):
+    up, Cl = _fake_ig(tmp_path)
+    choice, track = up.pick_audio(["phonk"], recently_used={"1"})
+    assert choice["audio_id"] in {"2", "3"} and track is not None
+    res = up.upload(tmp_path / "v.mp4", "cap", audio=dict(choice, _track=track))
+    assert Cl.calls == [("music", choice["audio_id"])]
+    assert res.permalink == "https://www.instagram.com/reel/ABC/"
+    assert res.audio_used["audio_id"] == choice["audio_id"] and "_track" not in res.audio_used
+
+
+def test_instagrapi_music_failure_falls_back(tmp_path):
+    up, Cl = _fake_ig(tmp_path, music_fails=True)
+    choice, track = up.pick_audio([], set())
+    res = up.upload(tmp_path / "v.mp4", "cap", audio=dict(choice, _track=track))
+    assert [c[0] for c in Cl.calls] == ["music", "plain"]
+    assert res.audio_used is None and res.notes
