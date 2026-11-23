@@ -20,7 +20,7 @@ class GraphUploader(Uploader):
         g = cfg.graph
         self.client = GraphClient(cfg.secrets.ig_user_id, cfg.secrets.ig_access_token,
                                   host=g.host, version=g.version)
-        self.supports_trending_audio = g.host == "graph.facebook.com"
+        self.supports_trending_audio = self.client.host == "graph.facebook.com"
 
     def check(self) -> str:
         me = self.client.me()

@@ -30,8 +30,14 @@ class GraphClient:
                  version: str = "v25.0", timeout: int = 60):
         if not ig_user_id or not access_token:
             raise GraphError("IG_USER_ID and IG_ACCESS_TOKEN must be set in .env for the Graph API uploader")
-        self.user_id = ig_user_id
-        self.token = access_token
+        self.user_id = ig_user_id.strip()
+        self.token = access_token.strip()
+        # Tokens from "Instagram Login" (no Facebook Page needed) start with "IG" and only work on
+        # graph.instagram.com; Facebook-Login tokens start with "EAA". Pick the right host automatically.
+        if self.token.startswith("IG"):
+            host = "graph.instagram.com"
+        elif self.token.startswith("EAA"):
+            host = "graph.facebook.com"
         self.host = host
         self.version = version
         self.timeout = timeout
