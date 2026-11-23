@@ -8,6 +8,7 @@ Keep the pace human (a few Reels a day) and run it from your own PC/home interne
 from __future__ import annotations
 
 import getpass
+import os
 import logging
 import random
 from pathlib import Path
@@ -20,6 +21,17 @@ log = logging.getLogger(__name__)
 def _ask(prompt: str) -> str:
     print(prompt, end="", flush=True)
     return input().strip()
+
+
+SESSIONID_HELP = """
+==================== Log in using your browser ====================
+1. Open instagram.com in Chrome / Brave / Edge and make sure you are logged in.
+2. Press F12 -> open the "Application" tab (Chrome/Brave/Edge) or "Storage" (Firefox).
+3. Left side: Cookies -> https://www.instagram.com
+4. Find the row named  sessionid  and copy its Value (double-click it, Ctrl+C).
+   Keep it private - it works like your password. Don't log out on the browser after this.
+====================================================================
+"""
 
 
 class InstagrapiUploader(Uploader):
@@ -38,39 +50,90 @@ class InstagrapiUploader(Uploader):
         self.cl.challenge_code_handler = lambda username, choice: _ask(
             f"\nInstagram sent a security code to your {getattr(choice, 'name', choice)}. Type it here: ")
         self._logged_in = False
+        self.on_new_sessionid = None  # callback to persist a pasted sessionid
 
     # ---- login ---------------------------------------------------------------
+    # Instagram retired the old app password-login endpoint (it now answers "your version of Instagram is
+    # out of date"). Reusing the login from your web browser (the `sessionid` cookie) avoids that endpoint.
+    APP_VERSION = {"app_version": "456.0.0.53.78", "version_code": "386214528"}
+
+    def _bump_app_version(self) -> None:
+        try:
+            self.cl.set_device({**self.cl.device_settings, **self.APP_VERSION})
+            self.cl.set_user_agent()
+        except Exception as exc:  # noqa: BLE001 - optional
+            log.debug("could not bump app version: %s", exc)
+
+    def _login_sessionid(self, sessionid: str) -> None:
+        from urllib.parse import unquote
+
+        sid = unquote(sessionid.strip().strip('"').strip("'"))
+        self._bump_app_version()
+        self.cl.login_by_sessionid(sid)
+        self.cl.dump_settings(self.session_file)
+        self._logged_in = True
+
     def _login(self) -> None:
         if self._logged_in:
             return
-        from instagrapi.exceptions import LoginRequired, TwoFactorRequired
+        from instagrapi.exceptions import TwoFactorRequired
 
         s = self.cfg.secrets
-        username = s.ig_username or _ask("Instagram username: ")
-        password = s.ig_password or getpass.getpass("Instagram password (hidden while typing): ")
         self.session_file.parent.mkdir(parents=True, exist_ok=True)
+
+        # 1. saved session from a previous run
         if self.session_file.exists():
             try:
                 self.cl.load_settings(self.session_file)
-                self.cl.login(username, password)
-                self.cl.get_timeline_feed()  # session still valid?
+                self._bump_app_version()
+                self.cl.account_info()
                 self._logged_in = True
-                self.cl.dump_settings(self.session_file)
                 return
-            except LoginRequired:
-                log.info("Saved session expired, logging in again")
-                old = self.cl.get_settings()
-                self.cl.set_settings({})
-                self.cl.set_uuids(old.get("uuids", {}))
             except Exception as exc:  # noqa: BLE001
-                log.info("Saved session not usable (%s), logging in again", exc)
-        try:
-            self.cl.login(username, password)
-        except TwoFactorRequired:
-            code = _ask("Two-factor code (from SMS / authenticator app): ")
-            self.cl.login(username, password, verification_code=code)
-        self.cl.dump_settings(self.session_file)
-        self._logged_in = True
+                log.info("Saved session not usable (%s)", exc)
+                self.cl = type(self.cl)()
+                self.cl.delay_range = [2, 5]
+
+        # 2. browser session id (recommended)
+        if s.ig_sessionid:
+            try:
+                self._login_sessionid(s.ig_sessionid)
+                return
+            except Exception as exc:  # noqa: BLE001
+                print(f"\nThe saved browser session did not work ({exc}).")
+
+        # 3. username + password - off by default: Instagram currently refuses it and repeated
+        #    failed logins can lock the account. Enable with IG_TRY_PASSWORD=1 in .env.
+        if s.ig_username and s.ig_password and os.environ.get("IG_TRY_PASSWORD") == "1":
+            try:
+                self._bump_app_version()
+                try:
+                    self.cl.login(s.ig_username, s.ig_password)
+                except TwoFactorRequired:
+                    code = _ask("Two-factor code (from SMS / authenticator app): ")
+                    self.cl.login(s.ig_username, s.ig_password, verification_code=code)
+                self.cl.dump_settings(self.session_file)
+                self._logged_in = True
+                return
+            except Exception as exc:  # noqa: BLE001
+                print(f"\nPassword login was refused by Instagram ({exc}).")
+
+        # 4. ask for the browser session id
+        print(SESSIONID_HELP)
+        for attempt in range(3):
+            sid = getpass.getpass("Paste your sessionid here (hidden) and press Enter: ")
+            try:
+                self._login_sessionid(sid)
+                break
+            except Exception as exc:  # noqa: BLE001
+                print(f"That sessionid did not work ({exc}). Copy the whole Value and try again.")
+                self.cl = type(self.cl)()
+                self.cl.delay_range = [2, 5]
+        else:
+            raise RuntimeError("Could not log in to Instagram with the browser session.")
+        s.ig_sessionid = sid
+        if self.on_new_sessionid:
+            self.on_new_sessionid(sid)
 
     def check(self) -> str:
         self._login()

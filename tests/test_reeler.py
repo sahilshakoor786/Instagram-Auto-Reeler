@@ -532,3 +532,44 @@ def test_instagrapi_music_failure_falls_back(tmp_path):
     res = up.upload(tmp_path / "v.mp4", "cap", audio=dict(choice, _track=track))
     assert [c[0] for c in Cl.calls] == ["music", "plain"]
     assert res.audio_used is None and res.notes
+
+
+def test_instagrapi_sessionid_login(tmp_path, monkeypatch):
+    pytest.importorskip("instagrapi")
+    from reeler.uploaders import instagrapi_up as mod
+
+    cfg = make_cfg(tmp_path, uploader="instagrapi")
+    up = mod.InstagrapiUploader(cfg)
+    seen = {}
+
+    class FakeCl:
+        device_settings = {}
+        delay_range = None
+
+        def set_device(self, d):
+            seen["device"] = d
+
+        def set_user_agent(self):
+            pass
+
+        def login_by_sessionid(self, sid):
+            if not sid.startswith("123"):
+                raise AssertionError("Invalid sessionid")
+            seen["sid"] = sid
+
+        def dump_settings(self, path):
+            seen["dumped"] = True
+
+        def login(self, *a, **k):
+            raise AssertionError("password login must not be attempted by default")
+
+    up.cl = FakeCl()
+    cfg.secrets.ig_username, cfg.secrets.ig_password = "me", "pw"
+    answers = iter(["bad", "123%3Aabc%3A9"])
+    monkeypatch.setattr(mod.getpass, "getpass", lambda prompt="": next(answers))
+    saved = []
+    up.on_new_sessionid = saved.append
+    up._login()
+    assert seen["sid"] == "123:abc:9"                      # URL-decoded browser cookie
+    assert seen["device"]["app_version"] == mod.InstagrapiUploader.APP_VERSION["app_version"]
+    assert saved == ["123%3Aabc%3A9"] and up._logged_in

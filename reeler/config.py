@@ -123,6 +123,7 @@ class Secrets:
     ig_username: str | None
     ig_password: str | None
     google_api_key: str | None = None
+    ig_sessionid: str | None = None
 
 
 class Config(_Section):
@@ -172,5 +173,6 @@ def load_config(path: str | os.PathLike | None = None) -> Config:
         ig_username=env("IG_USERNAME"),
         ig_password=env("IG_PASSWORD"),
         google_api_key=env("GOOGLE_API_KEY"),
+        ig_sessionid=env("IG_SESSIONID"),
     )
     return cfg
