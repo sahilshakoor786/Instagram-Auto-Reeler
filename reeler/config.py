@@ -78,6 +78,10 @@ DEFAULTS: dict[str, Any] = {
         "weekly_query_budget": 25,  # Instagram allows 30 unique hashtag lookups / 7 days
         "seed_tags": ["gta6", "gtavi", "grandtheftauto6", "vicecity", "gta6gameplay"],
     },
+    "drive": {
+        "folder": "",  # Google Drive folder link or ID (shared "Anyone with the link")
+        "manifest": "",  # optional committed snapshot of the folder listing
+    },
     "graph": {
         "host": "graph.facebook.com",  # graph.instagram.com for Instagram-Login tokens
         "version": "v25.0",
@@ -118,6 +122,7 @@ class Secrets:
     fb_app_secret: str | None
     ig_username: str | None
     ig_password: str | None
+    google_api_key: str | None = None
 
 
 class Config(_Section):
@@ -166,5 +171,6 @@ def load_config(path: str | os.PathLike | None = None) -> Config:
         fb_app_secret=env("FB_APP_SECRET"),
         ig_username=env("IG_USERNAME"),
         ig_password=env("IG_PASSWORD"),
+        google_api_key=env("GOOGLE_API_KEY"),
     )
     return cfg

@@ -37,6 +37,31 @@ weekly budget (25 by default), so it never goes over that limit.
 
 ---
 
+## ☁️ Cloud mode: post from Google Drive with no PC needed
+
+GitHub Actions runs `.github/workflows/autopost.yml` 4 times a day. Each run:
+
+1. Picks the next clip from your Google Drive folder that hasn't been posted yet.
+2. Downloads only that clip.
+3. Processes it exactly like the desktop version (AI caption, hook text, trending hashtags and audio).
+4. Posts it.
+5. Commits the posting history (`state/state.db`) back to the repo, so no clip is ever posted twice.
+
+Setup:
+1. Share the Drive folder as **Anyone with the link → Viewer**, and set its link in `config.cloud.yaml`.
+   New clips you add to the folder are picked up automatically.
+2. Merge this branch into `main`. GitHub only runs scheduled workflows from the default branch.
+3. In GitHub, go to **Repo → Settings → Secrets and variables → Actions → New repository secret** and add:
+   `IG_USER_ID`, `IG_ACCESS_TOKEN` (see step 2 below for how to get them), `ANTHROPIC_API_KEY`
+   (optional), and `GOOGLE_API_KEY` (optional; makes listing new Drive uploads more reliable).
+4. Go to **Actions → Auto-post GTA 6 Reel → Run workflow**, keep "Dry run" ticked, and run it. When it
+   finishes, download the `reel-preview` artifact and read the caption in the log.
+5. If the preview looks good, you're done: the schedule takes over. To post one right away, run the
+   workflow again with "Dry run" unticked.
+
+To change the posting times, edit the `cron` lines in the workflow. They are in UTC: India time minus
+5:30. Each run uses about 3–5 of the 2,000 free GitHub Actions minutes a private repo gets per month.
+
 ## 1. Install
 
 You need **Python 3.10+** and **ffmpeg**:

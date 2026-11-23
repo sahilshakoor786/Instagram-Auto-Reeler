@@ -346,3 +346,120 @@ def test_graph_client_resumable_upload_headers(tmp_path):
     up = calls[1]
     assert up[2]["Authorization"] == "OAuth TOKEN" and up[2]["file_size"] == "1234" and up[2]["offset"] == "0"
     assert len(up[3]) == 1234
+
+
+# ---------------------------------------------------------------- Google Drive cloud mode
+def test_drive_folder_id_parsing():
+    from reeler.gdrive import folder_id_from
+    assert folder_id_from("https://drive.google.com/drive/folders/1f1X03l5Xg80wq-fnJOz0RWbk0SiTf68k?usp=sharing") \
+        == "1f1X03l5Xg80wq-fnJOz0RWbk0SiTf68k"
+    assert folder_id_from("https://drive.google.com/open?id=abcdefghijkl") == "abcdefghijkl"
+    assert folder_id_from("abcdefghijkl") == "abcdefghijkl"
+
+
+class _R:
+    def __init__(self, text="", content=b"", ctype="text/html", status=200):
+        self.text, self._c, self.headers, self.status_code = text, content, {"Content-Type": ctype}, status
+
+    def raise_for_status(self):
+        if self.status_code >= 400:
+            raise RuntimeError(self.status_code)
+
+    def iter_content(self, n):
+        yield self._c
+
+    def json(self):
+        return json.loads(self.text)
+
+
+def test_drive_listing_merges_manifest_and_embedded(tmp_path):
+    from reeler import gdrive
+    man = tmp_path / "m.json"
+    man.write_text(json.dumps([{"id": "AAAAAAAAAAAA", "name": "clip_1.mp4", "size": 5}]))
+    page = ('<div class="flip-entry" id="entry-BBBBBBBBBBBB" tabindex="0"><div class="flip-entry-title">clip_2.mp4</div>'
+            '<div class="flip-entry" id="entry-AAAAAAAAAAAA"><div class="flip-entry-title">clip_1.mp4</div>'
+            '<div class="flip-entry" id="entry-CCCCCCCCCCCC"><div class="flip-entry-title">notes.txt</div>')
+
+    class S:
+        def get(self, url, **kw):
+            assert "embeddedfolderview" in url
+            return _R(page)
+
+    files = gdrive.list_folder("FOLDERID12345", manifest=man, session=S())
+    assert [f["id"] for f in files] == ["AAAAAAAAAAAA", "BBBBBBBBBBBB"]
+
+
+def test_drive_download_handles_confirm_page(tmp_path):
+    from reeler import gdrive
+    calls = []
+    confirm = ('<form id="download-form" action="https://drive.usercontent.google.com/download" method="get">'
+               '<input type="hidden" name="id" value="FILE"><input type="hidden" name="confirm" value="t">'
+               '<input type="hidden" name="uuid" value="u-1"></form>')
+
+    class S:
+        def get(self, url, params=None, **kw):
+            calls.append(params)
+            if len(calls) == 1:
+                return _R(confirm)
+            return _R(content=b"v" * 4096, ctype="video/mp4")
+
+    out = gdrive.download("FILE", tmp_path / "a.mp4", session=S())
+    assert out.stat().st_size == 4096 and calls[1]["uuid"] == "u-1"
+
+
+def test_drive_download_private_file_errors(tmp_path):
+    from reeler import gdrive
+
+    class S:
+        def get(self, url, **kw):
+            return _R("<a href='https://accounts.google.com/ServiceLogin'>sign in</a>")
+
+    with pytest.raises(RuntimeError, match="not public"):
+        gdrive.download("FILE", tmp_path / "a.mp4", session=S())
+
+
+@pytest.mark.skipif(not HAS_FFMPEG, reason="ffmpeg not installed")
+def test_cloud_post_cycles_through_drive(tmp_path, monkeypatch):
+    from reeler import gdrive
+    from reeler.uploaders.base import UploadResult
+
+    src = {"ID_A": make_clip(tmp_path / "src" / "a.mp4"), "ID_B": make_clip(tmp_path / "src" / "b.mp4", size="720x1280")}
+    monkeypatch.setattr(gdrive, "list_folder", lambda *a, **k: [{"id": "ID_A", "name": "clip a.mp4"},
+                                                                  {"id": "ID_B", "name": "clip_b.mp4"},
+                                                                  {"id": "ID_BAD", "name": "broken.mp4"}])
+
+    def fake_download(fid, dest, session=None):
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        if fid == "ID_BAD":
+            dest.write_bytes(b"not a video" * 200)
+        else:
+            shutil.copyfile(src[fid], dest)
+        return dest
+
+    monkeypatch.setattr(gdrive, "download", fake_download)
+    cfg = make_cfg(tmp_path, drive={"folder": "x"}, order="name", after_post="delete", state_file="state/s.db",
+                   video={"width": 540, "height": 960},
+                   schedule={"max_posts_per_day": 2, "min_gap_minutes": 0, "timezone": "UTC",
+                             "post_times": ["10:00"]})
+
+    class Up:
+        name = "graph"
+        supports_trending_audio = False
+        n = 0
+
+        def upload(self, video, caption, **kw):
+            Up.n += 1
+            return UploadResult(f"m{Up.n}", f"https://instagram.com/reel/{Up.n}/")
+
+    app = Reeler(cfg)
+    r1 = app.cloud_post(Up())
+    assert r1["file"] == "broken.mp4" or r1["file"] == "clip a.mp4"
+    names = {r1["file"]}
+    r2 = app.cloud_post(Up())
+    names.add(r2.get("file"))
+    assert names == {"clip a.mp4", "clip_b.mp4"}
+    assert "daily cap" in app.cloud_post(Up())["skipped"]     # max_posts_per_day = 2
+    assert (tmp_path / "state" / "s.db").exists()
+    done = app.state.kv_get("drive_done")
+    assert done["ID_A"] == "posted" and done["ID_B"] == "posted"
+    assert app.state.kv_get("drive_fail").get("ID_BAD", 0) >= 1

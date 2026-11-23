@@ -5,8 +5,10 @@ from __future__ import annotations
 import json
 import logging
 import random
+import re
 import shutil
 import time
+from datetime import datetime
 from pathlib import Path
 
 from reeler import media
@@ -23,7 +25,8 @@ class Reeler:
     def __init__(self, cfg):
         self.cfg = cfg
         cfg.work_path.mkdir(parents=True, exist_ok=True)
-        self.state = State(cfg.work_path / "state.db")
+        state_file = cfg.get("state_file")
+        self.state = State(cfg.resolve(state_file) if state_file else cfg.work_path / "state.db")
         self._graph: GraphClient | None | bool = False
 
     # ---- helpers --------------------------------------------------------
@@ -212,6 +215,81 @@ class Reeler:
                 self.state.update(row["id"], status="failed", error=str(exc)[:1000])
                 continue
         return None
+
+
+    # ---- cloud mode: Google Drive folder -> one Reel per run ---------------
+    def cloud_post(self, uploader, *, now_ts: float | None = None) -> dict:
+        """Pick the next un-posted clip from Drive, download only that one, post it."""
+        from reeler import gdrive
+        from reeler.scheduler import get_tz
+
+        cfg = self.cfg
+        d = cfg.drive
+        tz = get_tz(cfg.schedule.timezone)
+        now_ts = now_ts or time.time()
+        today = datetime.fromtimestamp(now_ts, tz).date()
+        posted = self.state.posted_since(now_ts - 2 * 86400)
+        today_count = sum(1 for r in posted if datetime.fromtimestamp(r["posted_at"], tz).date() == today)
+        if uploader.name != "dry-run":
+            if today_count >= int(cfg.schedule.max_posts_per_day):
+                return {"skipped": f"daily cap reached ({today_count} today)"}
+            if posted and now_ts - posted[-1]["posted_at"] < int(cfg.schedule.min_gap_minutes) * 60:
+                return {"skipped": "too soon after the previous post"}
+
+        manifest = cfg.resolve(d.manifest) if d.get("manifest") else None
+        files = gdrive.list_folder(gdrive.folder_id_from(d.folder), api_key=cfg.secrets.google_api_key,
+                                   manifest=manifest)
+        done: dict = self.state.kv_get("drive_done", {}) or {}
+        fails: dict = self.state.kv_get("drive_fail", {}) or {}
+        todo = [f for f in files if f["id"] not in done]
+        if not todo:
+            return {"skipped": f"all {len(files)} Drive clips are already posted"}
+        if cfg.order == "random":
+            rnd = random.Random(self.state.kv_get("shuffle_seed") or self._new_seed())
+            todo.sort(key=lambda f: rnd.random())
+        elif cfg.order == "newest":
+            todo.reverse()
+        else:
+            todo.sort(key=lambda f: _natural_key(f["name"]))
+
+        cache = cfg.videos_path
+        for f in todo[:3]:
+            local = cache / re.sub(r"[^A-Za-z0-9._-]", "_", f["name"])
+            try:
+                if not local.exists():
+                    log.info("downloading %s from Drive", f["name"])
+                    gdrive.download(f["id"], local)
+                media.probe(local)
+                vid, _ = self.state.upsert_video(local)
+                row = self.state.get(vid)
+                if row["status"] == "posted":  # same clip uploaded twice to Drive
+                    done[f["id"]] = "duplicate"
+                    self.state.kv_set("drive_done", done)
+                    continue
+            except Exception as exc:  # noqa: BLE001 - bad file: count and move on
+                fails[f["id"]] = fails.get(f["id"], 0) + 1
+                if fails[f["id"]] >= 3:
+                    done[f["id"]] = "failed"
+                log.error("skipping %s: %s", f["name"], exc)
+                self.state.kv_set("drive_fail", fails)
+                self.state.kv_set("drive_done", done)
+                local.unlink(missing_ok=True)
+                continue
+            try:
+                res = self.post(vid, uploader)
+            except Exception:
+                fails[f["id"]] = fails.get(f["id"], 0) + 1
+                if fails[f["id"]] >= 3:
+                    done[f["id"]] = "failed"
+                self.state.kv_set("drive_fail", fails)
+                self.state.kv_set("drive_done", done)
+                raise
+            if uploader.name != "dry-run":
+                done[f["id"]] = "posted"
+                self.state.kv_set("drive_done", done)
+            res.update({"file": f["name"], "remaining": len(todo) - 1})
+            return res
+        return {"skipped": "no usable clip in this run (see errors above)"}
 
 
 def build_caption(analysis: dict, tags: list[str], cfg) -> str:

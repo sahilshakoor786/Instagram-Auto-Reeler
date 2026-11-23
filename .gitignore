@@ -8,3 +8,4 @@ config.yaml
 videos/
 *.session.json
 .pytest_cache/
+.cache/

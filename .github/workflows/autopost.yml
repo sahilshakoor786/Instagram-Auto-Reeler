@@ -1,0 +1,64 @@
+name: Auto-post GTA 6 Reel
+
+on:
+  schedule:
+    # Times are UTC. These = 11:37, 15:37, 19:37, 22:37 India time (IST).
+    - cron: "7 6,10,14,17 * * *"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Dry run (render + caption only, nothing uploaded)"
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+
+concurrency:
+  group: autopost
+  cancel-in-progress: false
+
+jobs:
+  post:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install ffmpeg
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg fonts-dejavu-core
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Post next clip
+        env:
+          IG_USER_ID: ${{ secrets.IG_USER_ID }}
+          IG_ACCESS_TOKEN: ${{ secrets.IG_ACCESS_TOKEN }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
+        run: python -m reeler -c config.cloud.yaml cloud-post ${{ inputs.dry_run && '--dry-run' || '' }}
+
+      - name: Upload preview (dry run)
+        if: ${{ inputs.dry_run }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: reel-preview
+          path: .cache/work/clips/**/reel.mp4
+          if-no-files-found: ignore
+
+      - name: Save posting history
+        if: ${{ always() && !inputs.dry_run }}
+        run: |
+          git config user.name "reeler-bot"
+          git config user.email "reeler-bot@users.noreply.github.com"
+          git add state/
+          git diff --cached --quiet && exit 0
+          git commit -m "Update posting history [skip ci]"
+          for i in 1 2 3; do git pull --rebase -q && git push && exit 0; sleep 5; done
+          exit 1

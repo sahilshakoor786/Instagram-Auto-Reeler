@@ -272,6 +272,27 @@ def cmd_run(args) -> int:
         time.sleep(60)
 
 
+def cmd_cloud_post(args) -> int:
+    """One run of cloud mode (GitHub Actions): next Drive clip -> Reel."""
+    cfg, app = _app(args)
+    if not cfg.drive.folder:
+        _p("Set drive.folder in the config first.")
+        return 1
+    media.require_ffmpeg()
+    res = app.cloud_post(_uploader(cfg))
+    if "skipped" in res:
+        _p(f"Nothing posted: {res['skipped']}")
+        return 0
+    _p(f"Posted {res['file']} -> {res.get('permalink') or res.get('media_id')}  ({res['remaining']} clips left)")
+    if res.get("audio"):
+        _p(f"  trending audio: {res['audio'].get('label')}")
+    for n in res.get("notes", []):
+        _p(f"  note: {n}")
+    row = app.state.get(res["id"])
+    _p("\nCaption:\n" + (row["caption"] or ""))
+    return 0
+
+
 def cmd_refresh_token(args) -> int:
     from reeler.graph import GraphClient
     cfg = load_config(args.config)
@@ -344,6 +365,10 @@ def build_parser() -> argparse.ArgumentParser:
     rn.add_argument("--dry-run", action="store_true")
     rn.add_argument("--exit-when-empty", action="store_true")
     rn.set_defaults(fn=cmd_run)
+
+    cp = sub.add_parser("cloud-post", help="cloud mode: post the next clip from the Google Drive folder")
+    cp.add_argument("--dry-run", action="store_true")
+    cp.set_defaults(fn=cmd_cloud_post)
 
     sub.add_parser("refresh-token", help="exchange/refresh the Instagram access token (~60 days)") \
         .set_defaults(fn=cmd_refresh_token)
