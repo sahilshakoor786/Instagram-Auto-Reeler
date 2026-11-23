@@ -609,3 +609,27 @@ def test_browser_login_reads_cookie_after_login(tmp_path):
     finally:
         srv.shutdown()
     assert sid == "4242%3Aabc%3A1"
+
+
+def test_after_post_never_raises_on_locked_files(tmp_path, monkeypatch):
+    cfg = make_cfg(tmp_path, after_post="delete")
+    app = Reeler(cfg)
+    reel = cfg.work_path / "clips" / "00007" / "reel.mp4"
+    reel.parent.mkdir(parents=True)
+    reel.write_bytes(b"x")
+    src = tmp_path / "src.mp4"
+    src.write_bytes(b"y")
+    real_unlink = Path.unlink
+    locked = {str(reel), str(src)}
+
+    def flaky_unlink(self, missing_ok=False):
+        if str(self) in locked:
+            raise PermissionError(32, "The process cannot access the file because it is being used")
+        return real_unlink(self, missing_ok=missing_ok)
+
+    monkeypatch.setattr(Path, "unlink", flaky_unlink)
+    app._after_post(src, 7)                       # must not raise (Windows WinError 32)
+    assert set(app.state.kv_get("cleanup_later")) == locked
+    locked.clear()                                # later the lock is gone
+    app.sweep_cleanup()
+    assert app.state.kv_get("cleanup_later") == [] and not reel.exists() and not src.exists()

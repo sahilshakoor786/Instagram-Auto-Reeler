@@ -191,6 +191,10 @@ class Reeler:
                 "audio": res.audio_used, "notes": res.notes}
 
     def _after_post(self, src: Path, vid: int) -> None:
+        """Best-effort cleanup. Never raises: the Reel is already live at this point."""
+        import gc
+
+        gc.collect()  # release file handles left open by video libraries (Windows locks open files)
         action = self.cfg.after_post
         try:
             if action == "move" and src.exists():
@@ -204,10 +208,32 @@ class Reeler:
             elif action == "delete" and src.exists():
                 src.unlink()
         except OSError as exc:
-            log.warning("Could not %s %s: %s", action, src, exc)
+            log.info("Could not %s %s yet (%s) - will retry later", action, src, exc)
+            if action == "delete":
+                self._remember_cleanup(src)
         # rendered copy no longer needed
         reel = self.cfg.work_path / "clips" / f"{vid:05d}" / "reel.mp4"
-        reel.unlink(missing_ok=True)
+        try:
+            reel.unlink(missing_ok=True)
+        except OSError:
+            self._remember_cleanup(reel)
+
+    def _remember_cleanup(self, path: Path) -> None:
+        pending = self.state.kv_get("cleanup_later", []) or []
+        if str(path) not in pending:
+            pending.append(str(path))
+        self.state.kv_set("cleanup_later", pending)
+
+    def sweep_cleanup(self) -> None:
+        pending = self.state.kv_get("cleanup_later", []) or []
+        left = []
+        for p in pending:
+            try:
+                Path(p).unlink(missing_ok=True)
+            except OSError:
+                left.append(p)
+        if left != pending:
+            self.state.kv_set("cleanup_later", left)
 
     def post_next(self, uploader) -> dict | None:
         self.scan()
@@ -233,6 +259,7 @@ class Reeler:
         from reeler.scheduler import get_tz
 
         cfg = self.cfg
+        self.sweep_cleanup()
         d = cfg.drive
         tz = get_tz(cfg.schedule.timezone)
         now_ts = now_ts or time.time()
