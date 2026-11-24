@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "instagram-auto-reeler"
-version = "1.0.0"
-description = "Auto-post a folder of gameplay clips as trend-aware Instagram Reels"
+version = "2.0.0"
+description = "Auto-post short videos on any topic as trend-aware Instagram Reels and YouTube Shorts"
 requires-python = ">=3.10"
 dependencies = [
   "anthropic>=2.12",
@@ -17,6 +17,7 @@ dependencies = [
 
 [project.optional-dependencies]
 instagrapi = ["instagrapi>=2.1"]
+youtube = ["google-api-python-client>=2.100", "google-auth-oauthlib>=1.2"]
 dev = ["pytest>=8"]
 
 [project.scripts]

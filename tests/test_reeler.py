@@ -103,7 +103,7 @@ def test_analyze_media_finds_cooccurring_tags():
 
 
 def test_live_refresh_uses_budget_and_discovers(tmp_path):
-    cfg = make_cfg(tmp_path, trends={"live_research": True, "weekly_query_budget": 3})
+    cfg = make_cfg(tmp_path, preset="gta6", trends={"live_research": True, "weekly_query_budget": 3})
     app = Reeler(cfg)
     now = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%S+0000")
 
@@ -227,7 +227,7 @@ def test_render_reel_is_vertical(tmp_path):
 
 @pytest.mark.skipif(not HAS_FFMPEG, reason="ffmpeg not installed")
 def test_full_dry_run_post(tmp_path):
-    cfg = make_cfg(tmp_path, video={"width": 540, "height": 960})
+    cfg = make_cfg(tmp_path, preset="gta6", video={"width": 540, "height": 960})
     make_clip(tmp_path / "videos" / "clip_b.mp4")
     make_clip(tmp_path / "videos" / "clip_a.mp4", size="720x1280")
     app = Reeler(cfg)
@@ -633,3 +633,367 @@ def test_after_post_never_raises_on_locked_files(tmp_path, monkeypatch):
     locked.clear()                                # later the lock is gone
     app.sweep_cleanup()
     assert app.state.kv_get("cleanup_later") == [] and not reel.exists() and not src.exists()
+
+
+# ================================================================ universal niche
+def test_presets_and_simple_settings(tmp_path):
+    cfg = make_cfg(tmp_path, preset="cooking", posts_per_day=7, language="Spanish",
+                   signature="Follow for recipes", platforms="instagram+youtube")
+    assert "cooking" in cfg.ai.niche and cfg.niche == cfg.ai.niche
+    assert cfg.youtube.category_id == "26"
+    assert len(cfg.schedule.post_times) == 7 and cfg.schedule.max_posts_per_day == 7
+    assert cfg.caption.language == "Spanish" and cfg.caption.signature == "Follow for recipes"
+    assert cfg.platforms == ["instagram", "youtube"]
+    for name in ("gta6", "cooking", "football", "pets", "motivation"):
+        c = make_cfg(tmp_path, preset=name)
+        assert H.resolve_seed(c)["broad"], name
+
+
+def test_old_style_config_with_ai_niche_still_works(tmp_path):
+    cfg = make_cfg(tmp_path, ai={"enabled": False, "niche": "GTA 6 (Grand Theft Auto VI) gameplay clips"})
+    assert cfg.niche == "GTA 6 (Grand Theft Auto VI) gameplay clips"
+
+
+def test_any_niche_gets_hashtags_from_its_own_words(tmp_path):
+    cfg = make_cfg(tmp_path, niche="football skills")
+    app = Reeler(cfg)
+    app.refresh_trends()
+    tags = [r["tag"] for r in app.state.hashtags()]
+    assert "footballskills" in tags and "football" in tags
+    assert not any("gta" in t for t in tags)
+    pool = H.pool_from_state(app.state)
+    assert H.select_hashtags(pool, max_n=5)[0] == "footballskills"
+
+
+def test_niche_kit_is_generated_once_and_cached(tmp_path, monkeypatch):
+    from reeler import niche
+
+    calls = []
+
+    def fake_generate(cfg):
+        calls.append(cfg.ai.niche)
+        return {"niche": cfg.ai.niche, "topic": "makeup", "categories": ["tutorial", "glam", "other"],
+                "hook_examples": ["TRY THIS LOOK"], "music_vibes": ["rnb"],
+                "broad_tags": [{"tag": "makeup", "weight": 0.95}], "niche_tags": [{"tag": "glowymakeup", "weight": 0.5}],
+                "category_tags": [{"category": "glam", "tags": ["glammakeup"]}]}
+
+    monkeypatch.setattr(niche, "generate_kit", fake_generate)
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test")
+    cfg = make_cfg(tmp_path, niche="makeup tutorials", ai={"enabled": True})
+    seed = H.resolve_seed(cfg)
+    assert seed["broad"] == {"makeup": 0.95} and seed["categories"]["glam"] == {"glammakeup": 0.5}
+    H.resolve_seed(cfg)
+    assert calls == ["makeup tutorials"]                      # cached after the first time
+    prof = niche.load_profile(cfg)
+    assert prof.categories == ["tutorial", "glam", "other"] and prof.hook_examples == ["TRY THIS LOOK"]
+
+
+def test_prompt_and_schema_follow_the_niche(tmp_path):
+    from reeler.analyzer import build_schema, system_prompt
+    from reeler.niche import load_profile
+
+    cfg = make_cfg(tmp_path, preset="pets", brand="Paw Patrolz")
+    prof = load_profile(cfg)
+    text = system_prompt(cfg, prof)
+    assert "pets" in text and "Paw Patrolz" in text
+    assert "GTA" not in text and "VICE" not in text.upper()
+    assert build_schema(prof.categories)["properties"]["category"]["enum"] == prof.categories
+    gta = load_profile(make_cfg(tmp_path, preset="gta6"))
+    assert "car_chase" in gta.categories
+
+
+def test_offline_templates_are_generic(tmp_path):
+    from reeler.niche import load_profile
+
+    prof = load_profile(make_cfg(tmp_path, niche="knitting"))
+    for i in range(40):
+        for stats in ({"scene_cuts_per_sec": 0.9, "mean_volume_db": -10}, {"scene_cuts_per_sec": 0.01},
+                      {"scene_cuts_per_sec": 0.3}, {"scene_cuts_per_sec": 0.15}):
+            a = analyze_offline(stats, 6, seed=str(i), profile=prof)
+            blob = json.dumps(a).lower()
+            assert "gta" not in blob and "vice" not in blob and "{topic}" not in blob
+            assert a["hook_text"] and a["caption"] and a["title"]
+    gta = analyze_offline({"scene_cuts_per_sec": 0.9, "mean_volume_db": -10}, 6, seed="1",
+                          profile=load_profile(make_cfg(tmp_path, preset="gta6")))
+    assert gta["music_search_terms"] == ["phonk", "drift phonk"]
+
+
+def test_niche_change_starts_fresh_hashtag_pool(tmp_path):
+    cfg = make_cfg(tmp_path, preset="gta6")
+    app = Reeler(cfg)
+    app.refresh_trends()
+    assert any(r["tag"] == "gta6" for r in app.state.hashtags())
+    cfg2 = make_cfg(tmp_path, niche="funny cats")
+    app2 = Reeler(cfg2)
+    assert app2.state.hashtags() == []
+    app2.refresh_trends()
+    assert not any("gta" in r["tag"] for r in app2.state.hashtags())
+
+
+def test_discovery_uses_the_niche_not_gaming_words(tmp_path):
+    cfg = make_cfg(tmp_path, preset="cooking", trends={"live_research": True, "weekly_query_budget": 2})
+    app = Reeler(cfg)
+    now = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%S+0000")
+
+    class FakeGraph:
+        def hashtag_id(self, tag):
+            return f"id_{tag}"
+
+        def hashtag_media(self, hid, edge="top_media", limit=50):
+            return [{"caption": "#cooking #airfryerrecipes #recipeoftheday #gta6leaks", "like_count": 900,
+                     "comments_count": 9, "timestamp": now, "media_product_type": "REELS"}] * 3
+
+    H.refresh_trends(app.state, FakeGraph(), cfg, force=True)
+    tags = {r["tag"] for r in app.state.hashtags()}
+    assert "recipeoftheday" in tags and "gta6leaks" not in tags
+
+
+# ================================================================ scheduling / pacing
+def test_spread_times_and_pacing_warnings():
+    times, gap = scheduler.spread_times(5)
+    assert times[0] == "09:00" and times[-1] == "23:00" and len(times) == 5 and gap >= 60
+    assert len(scheduler.spread_times(100)[0]) == scheduler.MAX_PER_DAY
+    assert scheduler.pacing_warning(5) is None
+    assert "safe" in scheduler.pacing_warning(15)
+    assert "spam" in scheduler.pacing_warning(100) or "allows" in scheduler.pacing_warning(100)
+
+
+# ================================================================ multi-platform posting
+class _Up:
+    def __init__(self, platform, fail_times=0):
+        self.platform, self.name, self.fail_times = platform, platform, fail_times
+        self.supports_trending_audio = False
+        self.calls = []
+
+    def upload(self, video, caption, **kw):
+        from reeler.uploaders.base import UploadResult
+        self.calls.append(kw)
+        if self.fail_times:
+            self.fail_times -= 1
+            raise RuntimeError(f"{self.platform} is down")
+        return UploadResult(f"{self.platform}-{len(self.calls)}", f"https://{self.platform}/x{len(self.calls)}")
+
+
+@pytest.mark.skipif(not HAS_FFMPEG, reason="ffmpeg not installed")
+def test_each_platform_gets_each_clip_once(tmp_path):
+    cfg = make_cfg(tmp_path, niche="football skills", platforms=["instagram", "youtube"], after_post="keep",
+                   video={"width": 540, "height": 960})
+    make_clip(tmp_path / "videos" / "a.mp4")
+    app = Reeler(cfg)
+    ig, yt = _Up("instagram"), _Up("youtube", fail_times=1)
+    ups = {"instagram": ig, "youtube": yt}
+    res = app.post_next(ups)
+    assert not res["complete"] and "instagram" in res["platforms"]
+    assert app.state.get(res["id"])["status"] == "failed"         # YouTube still to do
+    res2 = app.post_next(ups)                                     # retry: only YouTube this time
+    assert res2["complete"] and list(res2["platforms"]) == ["youtube"]
+    assert len(ig.calls) == 1 and len(yt.calls) == 2
+    meta = yt.calls[-1]["meta"]
+    assert meta["title"].endswith("#Shorts") and "#Shorts" in meta["description"]
+    assert app.state.platform_counts() == {"instagram": 1, "youtube": 1}
+    assert app.post_next(ups) is None                              # never posted twice
+
+
+@pytest.mark.skipif(not HAS_FFMPEG, reason="ffmpeg not installed")
+def test_dry_run_uploaders_for_both_platforms(tmp_path):
+    from reeler.uploaders import make_uploaders
+    cfg = make_cfg(tmp_path, niche="dance videos", platforms=["instagram", "youtube"],
+                   video={"width": 540, "height": 960})
+    make_clip(tmp_path / "videos" / "a.mp4")
+    ups = make_uploaders(cfg)
+    assert set(ups) == {"instagram", "youtube"} and all(u.name == "dry-run" for u in ups.values())
+    res = Reeler(cfg).post_next(ups)
+    assert res["complete"] and set(res["platforms"]) == {"instagram", "youtube"}
+
+
+def test_old_database_history_is_migrated(tmp_path):
+    import sqlite3
+    from reeler.state import State
+
+    db = tmp_path / "pc_state.db"
+    s = State(db)
+    clip = tmp_path / "c.mp4"
+    clip.write_bytes(b"x" * 100)
+    vid, _ = s.upsert_video(clip)
+    s.update(vid, status="posted", media_id="m1", permalink="https://instagram.com/reel/1/", posted_at=1.0)
+    # make it look like a database from before per-platform history existed
+    s.conn.execute("DROP TABLE posts")
+    s.conn.execute("DELETE FROM kv WHERE key='posts_migrated'")
+    s.conn.commit()
+    s.conn.close()
+    s2 = State(db)
+    assert s2.platform_posted(vid, "instagram") and not s2.platform_posted(vid, "youtube")
+    assert s2.get(vid)["status"] == "posted"
+    assert sqlite3.connect(db).execute("SELECT COUNT(*) FROM posts").fetchone()[0] == 1
+
+
+# ================================================================ YouTube uploader (mocked API)
+class _FakeYT:
+    def __init__(self, privacy_back="public"):
+        self.privacy_back = privacy_back
+        self.inserted = None
+
+    def channels(self):
+        outer = self
+
+        class C:
+            def list(self, **kw):
+                class R:
+                    def execute(self_inner):
+                        return {"items": [{"snippet": {"title": "My Channel"}}]}
+                return R()
+        return C()
+
+    def videos(self):
+        outer = self
+
+        class V:
+            def insert(self, **kw):
+                outer.inserted = kw
+
+                class Req:
+                    n = 0
+
+                    def next_chunk(self_inner):
+                        Req.n += 1
+                        if Req.n == 1:
+                            return None, None
+                        return None, {"id": "yt123", "status": {"privacyStatus": outer.privacy_back}}
+                return Req()
+        return V()
+
+
+def test_youtube_upload_sends_shorts_metadata(tmp_path, monkeypatch):
+    from reeler.uploaders import youtube as Y
+
+    cfg = make_cfg(tmp_path, preset="gta6", platforms=["youtube"])
+    svc = _FakeYT(privacy_back="private")
+    up = Y.YouTubeUploader(cfg, service=svc)
+    assert up.check() == "YouTube channel 'My Channel'"
+    video = tmp_path / "r.mp4"
+    video.write_bytes(b"0" * 1000)
+    opened = []
+
+    class FakeMedia:
+        def __init__(self, path):
+            self._fd = open(path, "rb")
+            opened.append(self._fd)
+
+    monkeypatch.setattr(up, "_media", lambda v: FakeMedia(v))
+    meta = Y.youtube_metadata({"title": "Cops had no chance <wow> #gta6 " + "x" * 120}, "Full send 🚔\n\n#gta6 #vicecity",
+                              ["gta6", "vicecity"], cfg)
+    assert len(meta["title"]) <= 100 and meta["title"].endswith(" #Shorts") and "<" not in meta["title"]
+    assert "#gta6" not in meta["title"]
+    res = up.upload(video, "cap", meta=meta)
+    body = svc.inserted["body"]
+    assert body["snippet"]["categoryId"] == "20" and body["status"]["privacyStatus"] == "public"
+    assert body["status"]["selfDeclaredMadeForKids"] is False
+    assert "shorts" in body["snippet"]["tags"] and "#Shorts" in body["snippet"]["description"]
+    assert res.permalink == "https://youtube.com/shorts/yt123"
+    assert res.notes and "private" in res.notes[0]               # unaudited Google project
+    assert opened[0].closed                                      # file released (Windows can delete it)
+
+
+def test_youtube_without_setup_gives_plain_instructions(tmp_path):
+    pytest.importorskip("google_auth_oauthlib")
+    from reeler.uploaders.youtube import YouTubeUploader
+    cfg = make_cfg(tmp_path, platforms=["youtube"])
+    with pytest.raises(RuntimeError, match="Turn on YouTube Shorts"):
+        YouTubeUploader(cfg)._credentials()
+
+
+# ================================================================ projects (profiles) + migration
+def _legacy_root(tmp_path):
+    from reeler.state import State
+    root = tmp_path / "app"
+    (root / ".reeler").mkdir(parents=True)
+    st = State(root / ".reeler" / "pc_state.db")
+    clip = root / "old.mp4"
+    clip.write_bytes(b"z" * 100)
+    vid, _ = st.upsert_video(clip)
+    st.update(vid, status="posted", media_id="m", posted_at=1.0)
+    st.kv_set("drive_done", {"DRIVEID": "posted"})
+    st.conn.execute("DROP TABLE posts")                          # as written by the previous version
+    st.conn.execute("DELETE FROM kv WHERE key='posts_migrated'")
+    st.conn.commit()
+    st.conn.close()
+    (root / ".reeler" / "instagram.session.json").write_text("{}")
+    (root / ".env").write_text("ANTHROPIC_API_KEY=\nIG_SESSIONID=legacy%3Asid\n")
+    shutil.copyfile(Path(__file__).resolve().parent.parent / "config.pc.yaml", root / "config.pc.yaml")
+    return root
+
+
+def test_existing_gta_setup_becomes_a_project(tmp_path, monkeypatch):
+    from reeler import config as C
+    from reeler import profiles as P
+
+    monkeypatch.setattr(C, "load_dotenv", None)
+    root = _legacy_root(tmp_path)
+    assert P.migrate_legacy(root) == "gta6"
+    assert P.migrate_legacy(root) is None                         # only once
+    cfg = load_config(P.profile_path(root, "gta6"), root=root)
+    assert cfg.resolve(cfg.state_file) == (root / ".reeler" / "pc_state.db").resolve()
+    assert cfg.work_path == (root / ".reeler").resolve()          # same login/session files as before
+    assert cfg.secrets.ig_sessionid == "legacy%3Asid"
+    assert "GTA 6" in cfg.ai.niche and cfg.platforms == ["instagram"]
+    assert "drive.google.com" in cfg.drive.folder
+    app = Reeler(cfg)
+    assert app.state.kv_get("drive_done") == {"DRIVEID": "posted"}  # history kept: no re-uploads
+    assert app.state.platform_counts() == {"instagram": 1}
+
+
+def test_projects_do_not_share_accounts(tmp_path, monkeypatch):
+    from reeler import config as C
+    from reeler import profiles as P
+
+    monkeypatch.setattr(C, "load_dotenv", None)
+    monkeypatch.setenv("IG_SESSIONID", "someone-elses-session")
+    root = tmp_path / "app"
+    root.mkdir()
+    P.write_profile(root, "cooking", P.new_profile_data("cooking", root, {"niche": "cooking"}))
+    cfg = load_config(P.profile_path(root, "cooking"), root=root)
+    assert cfg.secrets.ig_sessionid is None
+    C.save_secret(cfg, "IG_SESSIONID", "cook%3Asid")
+    cfg = load_config(P.profile_path(root, "cooking"), root=root)
+    assert cfg.secrets.ig_sessionid == "cook%3Asid"
+    assert (root / ".reeler" / "cooking" / "account.env").exists()
+    assert cfg.resolve(cfg.state_file) == (root / ".reeler" / "cooking" / "state.db").resolve()
+
+
+def test_setup_questions_create_and_reuse_a_project(tmp_path, monkeypatch, capsys):
+    from reeler import config as C
+    from reeler import profiles as P
+
+    monkeypatch.setattr(C, "load_dotenv", None)
+    root = tmp_path / "app"
+    root.mkdir()
+    clips = tmp_path / "My Clips"
+    clips.mkdir()
+
+    def script(answers):
+        it = iter(answers)
+        return lambda prompt="": next(it)
+
+    # first run: name, folder, topic (preset 2 = cooking), 40/day -> warned -> no -> 6, Instagram
+    name = P.choose_profile(script(["My Cooking!", "not/a/folder", f'"{clips}"', "2", "40", "n", "6", "1"]), root)
+    assert name == "my-cooking"
+    out = capsys.readouterr().out
+    assert "spam" in out or "limited" in out
+    data = P.read_profile(root, name)
+    assert data["videos_dir"] == str(clips) and data["after_post"] == "keep" and data["posts_per_day"] == 6
+    cfg = load_config(P.profile_path(root, name), root=root)
+    assert cfg.videos_path == clips.resolve() and "cooking" in cfg.ai.niche
+    assert len(cfg.schedule.post_times) == 6
+
+    # later run: Enter = same project, then "change" -> Drive link, own topic, Enter keeps 6/day, both
+    (root / "client_secret.json").write_text("{}")
+    link = "https://drive.google.com/drive/folders/1AbCdEfGhIjKlMnOpQrStUvWxYz123"
+    name2 = P.choose_profile(script(["", "c", link, "vegan baking", "", "3"]), root)
+    assert name2 == name
+    data = P.read_profile(root, name)
+    assert data["drive"]["folder"] == link and data["niche"] == "vegan baking" and "preset" not in data
+    assert data["platforms"] == ["instagram", "youtube"] and data["posts_per_day"] == 6
+    assert data["videos_dir"].endswith("downloads")
+    # a second project sits next to it
+    name3 = P.choose_profile(script(["n", "cars", link, "car repairs", "3", "1"]), root)
+    assert P.list_profiles(root) == ["cars", "my-cooking"] and name3 == "cars"

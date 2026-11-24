@@ -15,6 +15,7 @@ class UploadResult:
 
 class Uploader:
     name = "base"
+    platform = "instagram"
     supports_trending_audio = False
 
     def __init__(self, cfg):
@@ -33,9 +34,13 @@ class DryRunUploader(Uploader):
     name = "dry-run"
     supports_trending_audio = False
 
-    def check(self) -> str:
-        return "dry-run (nothing is uploaded)"
+    def __init__(self, cfg, platform: str = "instagram"):
+        super().__init__(cfg)
+        self.platform = platform
 
-    def upload(self, video, caption, *, cover=None, thumb_offset_ms=None, audio=None) -> UploadResult:
+    def check(self) -> str:
+        return f"dry-run for {self.platform} (nothing is uploaded)"
+
+    def upload(self, video, caption, *, cover=None, thumb_offset_ms=None, audio=None, meta=None) -> UploadResult:
         return UploadResult(media_id=f"dryrun-{int(time.time())}", permalink=None, audio_used=audio,
                             notes=["dry-run: not uploaded"])

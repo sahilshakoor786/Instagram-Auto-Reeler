@@ -29,6 +29,7 @@ BLOCKLIST = {
     "followme", "likes", "instalike", "tagsforlikes", "spam4spam", "s4s", "explorepage",
     "viral", "fyp", "foryou", "foryoupage", "explore", "trending", "reels", "reelsinstagram",
 }
+# Kept for the GTA 6 preset (presets/gta6.yaml lists the same words as trends.discovery_hints).
 GAMING_HINTS = ("gta", "game", "gaming", "rockstar", "vice", "leonida", "ps5", "xbox", "playstation",
                 "lucia", "jason", "clip", "stunt", "heist", "chase", "openworld", "graphics")
 
@@ -108,10 +109,47 @@ def analyze_media(media: list[dict], self_tag: str) -> dict:
     }
 
 
+def _seed_file(name: str, cfg) -> Path:
+    from reeler.config import DATA_DIR
+    for c in (Path(name).expanduser(), cfg.root / name, DATA_DIR / name):
+        if c.is_file():
+            return c
+    raise FileNotFoundError(f"hashtag seed file '{name}' not found")
+
+
+def resolve_seed(cfg) -> dict:
+    """Seed hashtags for THIS niche: your own file > config/preset > Claude starter kit > niche words."""
+    from reeler import niche
+
+    user = _user_seed_file(cfg)
+    if user:
+        return load_seed(user)
+    if cfg.trends.get("seed_file"):
+        return load_seed(_seed_file(cfg.trends.seed_file, cfg))
+    if cfg.get("hashtags"):
+        return dict(cfg["hashtags"])
+    kit = niche.ensure_kit(cfg)
+    if kit:
+        return niche.kit_seed(kit)
+    return niche.generic_seed(cfg.ai.niche)
+
+
+def discovery_hints(cfg, seed: dict) -> tuple[str, ...]:
+    """Words a newly discovered co-trending tag must contain to count as on-topic."""
+    from reeler.niche import niche_words
+
+    hints = [normalize_tag(h) for h in cfg.trends.get("discovery_hints") or []]
+    if not hints:
+        hints = [w.rstrip("s") for w in niche_words(cfg.ai.niche) if len(w) >= 3]
+        for bucket in ("broad", "niche"):
+            hints += [normalize_tag(t) for t in (seed.get(bucket) or {})]
+    return tuple(h for h in dict.fromkeys(hints) if len(h) >= 3)
+
+
 def refresh_trends(state: State, graph: GraphClient | None, cfg, force: bool = False) -> dict:
     """Re-score the hashtag pool. Uses live data when possible, otherwise seed priors."""
     tcfg = cfg.trends
-    seed = load_seed(_user_seed_file(cfg))
+    seed = resolve_seed(cfg)
     cands = seed_candidates(seed)
     for t in tcfg.get("seed_tags", []):
         t = normalize_tag(t)
@@ -124,7 +162,7 @@ def refresh_trends(state: State, graph: GraphClient | None, cfg, force: bool = F
 
     if tcfg.live_research and graph is not None and (force or not fresh_enough):
         try:
-            _live_research(state, graph, cfg, cands, report)
+            _live_research(state, graph, cfg, cands, report, hints=discovery_hints(cfg, seed))
             report["live"] = True
         except GraphError as exc:
             report["error"] = str(exc)
@@ -150,11 +188,16 @@ def refresh_trends(state: State, graph: GraphClient | None, cfg, force: bool = F
 
 
 def _user_seed_file(cfg) -> Path | None:
-    p = cfg.root / "trends.yaml"
-    return p if p.exists() else None
+    """Your own hashtag list: trends.yaml in the project's work folder (or, without profiles, next to
+    the config)."""
+    cands = [cfg.work_path / "trends.yaml"]
+    if not cfg.get("profile"):
+        cands.append(cfg.root / "trends.yaml")
+    return next((p for p in cands if p.exists()), None)
 
 
-def _live_research(state: State, graph: GraphClient, cfg, cands: dict[str, Candidate], report: dict) -> None:
+def _live_research(state: State, graph: GraphClient, cfg, cands: dict[str, Candidate], report: dict,
+                   hints: tuple[str, ...] = GAMING_HINTS) -> None:
     budget = int(cfg.trends.weekly_query_budget)
     week_ago = time.time() - WEEK
 
@@ -199,10 +242,10 @@ def _live_research(state: State, graph: GraphClient, cfg, cands: dict[str, Candi
         c.score = round(0.4 * c.score + 0.6 * live, 4)
         c.sources.add("live")
 
-    # Tags that keep showing up next to GTA 6 tags on top-performing posts = what's trending now.
+    # Tags that keep showing up next to this niche's tags on top-performing posts = what's trending now.
     max_co = max(co_total.values(), default=1) or 1
     for tag, weight in co_total.most_common(40):
-        if tag in BLOCKLIST or len(tag) > 30 or not any(h in tag for h in GAMING_HINTS):
+        if tag in BLOCKLIST or len(tag) > 30 or not any(h in tag for h in hints):
             continue
         score = round(0.35 + 0.6 * (weight / max_co), 4)
         if tag in cands:

@@ -1,3 +1,3 @@
-"""Instagram Auto Reeler - turn a folder of gameplay clips into scheduled, trend-aware Reels."""
+"""Auto Reeler - turn a folder of short videos (any topic) into scheduled Instagram Reels and YouTube Shorts."""
 
-__version__ = "1.0.0"
+__version__ = "2.0.0"

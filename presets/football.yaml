@@ -1,0 +1,26 @@
+# Ready-made settings for a football (soccer) skills / highlights page. Use it with:  preset: football
+niche: "football (soccer) skills, goals and highlights"
+youtube:
+  category_id: "17"   # Sports
+
+niche_profile:
+  topic: "football"
+  categories: [goal, skill_move, freekick, save, tackle, celebration, training, street_football,
+               funny, fail, other]
+  hook_examples: ["WATCH HIS LEFT FOOT", "NO WAY THAT WENT IN", "KEEPER HAD NO CHANCE", "LEARN THIS SKILL"]
+  music: [phonk, drill, hype, epic, trap]
+
+hashtags:
+  broad: {football: 1.0, soccer: 0.9, futbol: 0.7, footballskills: 0.75, goals: 0.7}
+  niche: {footballtraining: 0.55, soccerskills: 0.6, skills: 0.5, freestylefootball: 0.45,
+          footballedits: 0.5, sundayleague: 0.4}
+  categories:
+    goal: {goals: 0.7, golazo: 0.55, worldie: 0.45}
+    skill_move: {footballskills: 0.7, skills: 0.55, nutmeg: 0.45}
+    freekick: {freekick: 0.6, freekickgoal: 0.45}
+    save: {goalkeeper: 0.6, goalkeepersaves: 0.5}
+    training: {footballtraining: 0.6, soccertraining: 0.55}
+    street_football: {streetfootball: 0.55, panna: 0.4}
+    funny: {footballfunny: 0.5, footballmemes: 0.5}
+    fail: {footballfails: 0.5}
+    other: {football: 0.8}

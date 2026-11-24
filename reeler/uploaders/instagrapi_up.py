@@ -170,7 +170,7 @@ class InstagrapiUploader(Uploader):
             candidates += [t for t in _tracks_in(raw, Track)]
         except Exception as exc:  # noqa: BLE001
             log.info("trending music list unavailable: %s", exc)
-        terms = [t for t in (search_terms or []) if t][:3] or ["phonk", "trending"]
+        terms = [t for t in (search_terms or []) if t][:3] or ["trending"]
         for term in terms:
             try:
                 candidates += self.cl.search_music(term)[:8]

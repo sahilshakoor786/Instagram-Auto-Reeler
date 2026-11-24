@@ -1,4 +1,4 @@
-name: Auto-post GTA 6 Reel
+name: Auto-post Reel
 
 on:
   # Automatic schedule is OFF because the PC runner (START_HERE.bat) does the posting.

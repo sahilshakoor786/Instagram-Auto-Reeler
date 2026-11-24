@@ -1,5 +1,9 @@
 # Cloud mode (GitHub Actions). Clips come from Google Drive; posting history lives in state/state.db.
 # Posting times are set by the cron lines in .github/workflows/autopost.yml.
+# For another topic: change `preset` (presets/*.yaml) or replace it with  niche: "your topic",
+# and put your own Drive folder link below.
+
+preset: gta6
 
 drive:
   folder: "https://drive.google.com/drive/folders/1f1X03l5Xg80wq-fnJOz0RWbk0SiTf68k"
@@ -25,7 +29,7 @@ video:
 
 caption:
   max_hashtags: 5
-  signature: ""                      # e.g. "Follow for daily GTA 6 clips 🎮"
+  signature: ""                      # e.g. "Follow for daily clips 🎮"
 
 ai:
   enabled: true

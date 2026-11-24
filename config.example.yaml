@@ -1,6 +1,16 @@
-# Instagram Auto Reeler - settings. Secrets (tokens/passwords) go in .env, not here.
+# Auto Reeler - settings. Secrets (tokens/passwords) go in .env, not here.
+# Tip: on Windows you don't need this file - START_HERE.bat asks a few questions instead.
 
-videos_dir: ./videos          # put your GTA 6 clips here (sub-folders are fine)
+# ---- what is your page about? (this is all you need to change for a new topic) ----
+niche: "quick cooking recipes"   # free text: "football skills", "funny cats", "motivational speeches"...
+# preset: cooking             # or start from a ready-made preset: gta6, cooking, football, pets, motivation
+language: English             # language for captions and titles
+brand: ""                     # optional page name the AI may mention
+signature: ""                 # optional last caption line, e.g. "Follow @yourhandle for daily recipes"
+posts_per_day: 5              # spreads posts evenly 09:00-23:00 (0 = use schedule.post_times below)
+platforms: [instagram]        # instagram, youtube  (YouTube Shorts: see README)
+
+videos_dir: ./videos          # put your clips here (sub-folders are fine)
 work_dir: ./.reeler           # database, rendered reels, frames
 uploader: graph               # graph (official, recommended) | instagrapi (unofficial) | dry-run
 order: random                 # name | oldest | newest | random
@@ -18,7 +28,7 @@ video:
   width: 1080
   height: 1920
   fps: 30
-  fit: blur                   # blur = full gameplay on blurred background | crop = fill screen | pad = black bars
+  fit: blur                   # blur = full clip on blurred background | crop = fill screen | pad = black bars
   max_duration: 90
   crf: 20                     # lower = higher quality, bigger file
   hook_text: true             # bold on-screen hook in the first seconds ("WAIT FOR THE ENDING")
@@ -30,9 +40,7 @@ video:
 caption:
   max_hashtags: 5             # Instagram now limits posts to 5 hashtags
   add_cta: true               # adds a comment-bait question
-  signature: ""               # e.g. "Follow @yourhandle for daily GTA 6 clips 🎮"
   emoji: true
-  language: English
 
 ai:
   enabled: true               # needs ANTHROPIC_API_KEY; falls back to offline captions otherwise
@@ -40,20 +48,25 @@ ai:
   effort: low                 # low is plenty for captioning; raise to medium/high for better copy
   frames: 6                   # keyframes sent per clip
   use_fallbacks: true
-  niche: "GTA 6 (Grand Theft Auto VI) gameplay clips"
 
 audio:
-  mode: trending              # trending = attach a trending Instagram track | off = keep game audio
+  mode: trending              # trending = attach a trending Instagram track | off = keep the clip's audio
   audio_type: music           # music | original_sound
   audio_volume: 35            # 1-100 (added track)
-  video_volume: 70            # 1-100 (game audio)
+  video_volume: 70            # 1-100 (the clip's own audio)
   avoid_repeat_posts: 6       # don't reuse a track within the last N posts
-  original_audio_name: ""     # with mode=off: rename the game audio (e.g. "GTA 6 gameplay")
+  original_audio_name: ""     # with mode=off: rename the clip's own audio
 
 trends:
-  live_research: true         # score hashtags from live Instagram data (top/recent GTA 6 posts)
+  live_research: true         # score hashtags from live Instagram data (top/recent posts in your niche)
   refresh_hours: 24
   weekly_query_budget: 25     # Instagram allows 30 unique hashtag lookups per 7 days
+
+youtube:
+  client_secrets: client_secret.json   # from Google Cloud (README -> "Turn on YouTube Shorts")
+  privacy: public             # public | unlisted | private
+  category_id: "22"           # 22 People & Blogs, 20 Gaming, 26 Howto & Style, 17 Sports, 15 Pets & Animals
+  made_for_kids: false
 
 graph:
   host: graph.facebook.com    # graph.instagram.com if your token is from "Instagram Login"
