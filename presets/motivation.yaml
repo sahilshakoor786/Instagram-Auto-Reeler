@@ -1,0 +1,32 @@
+# Ready-made settings for a motivational speeches / quotes page. Use it with:  preset: motivation
+niche: "motivational speeches and mindset clips"
+youtube:
+  category_id: "27"   # Education
+
+niche_profile:
+  topic: "motivation"
+  categories: [discipline, success, mindset, gym, money, life_lesson, comeback, quote, other]
+  hook_examples: ["THIS WILL CHANGE YOUR DAY", "NOBODY IS COMING TO SAVE YOU", "LISTEN TO THIS TWICE",
+                  "STOP WAITING"]
+  music: [epic cinematic, emotional piano, motivational, dark ambient]
+  offline:
+    captions:
+      hype: ["Read that again 🔥", "This is your sign to start 🚀", "Discipline over everything 💯"]
+      intense: ["No excuses today 😤", "Lock in 🔒", "Hard truth 👀"]
+      chill: ["Slow progress is still progress 🌱", "Save this for when you need it ✨"]
+      cinematic: ["Let this sink in 🎬", "Words to live by 🙏"]
+    questions: ["Who needed to hear this today? 👇", "Agree? 👇", "What's your goal this year? 👇",
+                "Tag someone who needs this 👇"]
+
+hashtags:
+  broad: {motivation: 1.0, mindset: 0.85, success: 0.8, inspiration: 0.75, selfimprovement: 0.7}
+  niche: {motivationalspeech: 0.6, discipline: 0.6, growthmindset: 0.55, dailymotivation: 0.55,
+          motivationalquotes: 0.5, hardwork: 0.45}
+  categories:
+    discipline: {discipline: 0.65, consistency: 0.5}
+    success: {successmindset: 0.55, entrepreneur: 0.55}
+    gym: {gymmotivation: 0.6, fitnessmotivation: 0.55}
+    money: {wealthmindset: 0.45, entrepreneurlife: 0.45}
+    life_lesson: {lifelessons: 0.55, wisdom: 0.5}
+    quote: {quotes: 0.6, motivationalquotes: 0.55}
+    other: {motivation: 0.8}

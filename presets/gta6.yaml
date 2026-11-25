@@ -1,0 +1,35 @@
+# Ready-made settings for a GTA 6 gameplay page. Use it with:  preset: gta6
+niche: "GTA 6 (Grand Theft Auto VI) gameplay clips"
+youtube:
+  category_id: "20"   # Gaming
+
+niche_profile:
+  topic: "GTA 6"
+  categories: [car_chase, shootout, heist, stunt, open_world, scenery, nightlife, funny,
+               police, vehicles, boats_air, character, beach, other]
+  hook_examples: ["WAIT FOR THE ENDING", "VICE CITY HITS DIFFERENT", "COPS HAD NO CHANCE"]
+  music: [phonk, synthwave, 80s miami, drill, cinematic trailer, chill lofi]
+  offline:
+    hooks:
+      hype: ["WAIT FOR IT", "THIS IS INSANE", "VICE CITY GOES CRAZY", "NO WAY THIS HAPPENED"]
+      intense: ["COPS HAD NO CHANCE", "WATCH TILL THE END", "THIS GOT INTENSE", "FULL SEND"]
+      chill: ["VICE CITY HITS DIFFERENT", "JUST LOOK AT THIS", "GTA 6 IS BEAUTIFUL", "POV: SUNSET IN LEONIDA"]
+      cinematic: ["THIS LOOKS REAL", "NEXT GEN IS HERE", "PURE CINEMA"]
+    captions:
+      hype: ["GTA 6 never misses 🔥", "Vice City chaos at its finest 😤", "This game is on another level 🚀"]
+      intense: ["Full send in Vice City 🚔💨", "When the wanted level hits 5 stars 😳", "No brakes, no regrets 🏎️"]
+      chill: ["Just cruising through Leonida 🌴", "Vice City sunsets hit different 🌅", "The details in this game 😮‍💨"]
+      cinematic: ["Rockstar really cooked with this one 🎬", "Graphics so real it hurts 🤯"]
+    questions: ["Would you try this? 👇", "Rate this clip 1-10 👇", "What would you do here? 👇",
+                "Who else is hyped for this? 👇", "Best GTA ever? 👇"]
+    music:
+      hype: [phonk, drift phonk]
+      intense: [phonk, trap]
+      chill: [synthwave, 80s miami]
+      cinematic: [cinematic, synthwave]
+
+trends:
+  seed_file: gta6_tags.yaml
+  seed_tags: [gta6, gtavi, grandtheftauto6, vicecity, gta6gameplay]
+  discovery_hints: [gta, game, gaming, rockstar, vice, leonida, ps5, xbox, playstation,
+                    lucia, jason, clip, stunt, heist, chase, openworld, graphics]

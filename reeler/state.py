@@ -43,6 +43,17 @@ CREATE TABLE IF NOT EXISTS hashtag_lookups (
     hashtag_id    TEXT,
     looked_up_at  REAL NOT NULL
 );
+CREATE TABLE IF NOT EXISTS posts (
+    video_id      INTEGER NOT NULL,
+    platform      TEXT NOT NULL,                 -- instagram | youtube
+    status        TEXT NOT NULL,                 -- posted | failed
+    media_id      TEXT,
+    permalink     TEXT,
+    audio         TEXT,
+    error         TEXT,
+    posted_at     REAL,
+    PRIMARY KEY (video_id, platform)
+);
 CREATE TABLE IF NOT EXISTS kv (
     key   TEXT PRIMARY KEY,
     value TEXT
@@ -69,6 +80,51 @@ class State:
         self.conn.row_factory = sqlite3.Row
         self.conn.executescript(SCHEMA)
         self.conn.commit()
+        self._migrate()
+
+    def _migrate(self) -> None:
+        """Older databases only knew Instagram: copy their history into the per-platform table."""
+        if self.kv_get("posts_migrated"):
+            return
+        self.conn.execute(
+            "INSERT OR IGNORE INTO posts (video_id, platform, status, media_id, permalink, audio, posted_at) "
+            "SELECT id, 'instagram', 'posted', media_id, permalink, audio, posted_at FROM videos "
+            "WHERE status='posted'")
+        self.conn.commit()
+        self.kv_set("posts_migrated", True)
+
+    # ---- per-platform posting history ---------------------------------
+    def platform_posted(self, vid: int, platform: str) -> bool:
+        row = self.conn.execute("SELECT status FROM posts WHERE video_id=? AND platform=?",
+                                (vid, platform)).fetchone()
+        return bool(row and row["status"] == "posted")
+
+    def record_post(self, vid: int, platform: str, status: str, *, media_id: str | None = None,
+                    permalink: str | None = None, audio: Any = None, error: str | None = None) -> None:
+        self.conn.execute(
+            "INSERT INTO posts (video_id, platform, status, media_id, permalink, audio, error, posted_at) "
+            "VALUES (?,?,?,?,?,?,?,?) ON CONFLICT(video_id, platform) DO UPDATE SET status=excluded.status, "
+            "media_id=excluded.media_id, permalink=excluded.permalink, audio=excluded.audio, "
+            "error=excluded.error, posted_at=excluded.posted_at",
+            (vid, platform, status, media_id, permalink,
+             json.dumps(audio, ensure_ascii=False) if isinstance(audio, (dict, list)) else audio,
+             error, time.time() if status == "posted" else None),
+        )
+        self.conn.commit()
+
+    def posts_for(self, vid: int) -> list[sqlite3.Row]:
+        return self.conn.execute("SELECT * FROM posts WHERE video_id=? ORDER BY platform", (vid,)).fetchall()
+
+    def platform_counts(self) -> dict[str, int]:
+        rows = self.conn.execute(
+            "SELECT platform, COUNT(*) AS n FROM posts WHERE status='posted' GROUP BY platform").fetchall()
+        return {r["platform"]: r["n"] for r in rows}
+
+    def reset_trend_pool(self) -> None:
+        """Forget learned hashtags (used when a project's niche changes)."""
+        self.conn.execute("DELETE FROM hashtags")
+        self.conn.commit()
+        self.kv_set("trends_refreshed_at", 0)
 
     # ---- videos -------------------------------------------------------
     def upsert_video(self, path: Path) -> tuple[int, bool]:

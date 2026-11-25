@@ -16,6 +16,7 @@ from reeler.analyzer import analyze_offline, analyze_with_claude
 from reeler.audio import pick_trending_audio, recently_used_audio
 from reeler.graph import GraphClient, GraphError
 from reeler.hashtags import pool_from_state, refresh_trends, select_hashtags
+from reeler.niche import _has_api_key, load_profile
 from reeler.state import State
 
 log = logging.getLogger(__name__)
@@ -28,6 +29,13 @@ class Reeler:
         state_file = cfg.get("state_file")
         self.state = State(cfg.resolve(state_file) if state_file else cfg.work_path / "state.db")
         self._graph: GraphClient | None | bool = False
+        # a project that switches niche must not keep the old niche's hashtags
+        prev = self.state.kv_get("niche")
+        if prev != cfg.ai.niche:
+            if prev is not None:
+                log.info("Niche changed (%r -> %r): starting a fresh hashtag pool", prev, cfg.ai.niche)
+                self.state.reset_trend_pool()
+            self.state.kv_set("niche", cfg.ai.niche)
 
     # ---- helpers --------------------------------------------------------
     @property
@@ -111,13 +119,13 @@ class Reeler:
         frames = media.extract_frames(src, clip_dir / "frames", count=int(cfg.ai.frames))
         if analysis is None:
             stats = media.energy_stats(src)
-            if cfg.ai.enabled:
+            if cfg.ai.enabled and _has_api_key(cfg):
                 try:
                     analysis = analyze_with_claude(frames, cfg, trending, src.name, stats)
                 except Exception as exc:  # noqa: BLE001 - any AI failure falls back to heuristics
                     log.warning("AI analysis failed for %s (%s) - using offline heuristics", src.name, exc)
             if analysis is None:
-                analysis = analyze_offline(stats, len(frames), seed=row["fingerprint"])
+                analysis = analyze_offline(stats, len(frames), seed=row["fingerprint"], profile=load_profile(cfg))
             analysis["stats"] = stats
 
         # cover frame
@@ -133,9 +141,12 @@ class Reeler:
         if (v.hook_text or v.watermark) and font is None:
             log.warning("No font found for text overlays - set video.font_file in config.yaml")
         out = render_path = clip_dir / "reel.mp4"
+        max_duration = float(v.max_duration)
+        if "youtube" in cfg.platforms:  # Shorts must stay within YouTube's limit
+            max_duration = min(max_duration, float(cfg.youtube.max_seconds))
         media.render_reel(
             src, render_path, width=v.width, height=v.height, fps=v.fps, fit=v.fit,
-            max_duration=v.max_duration, crf=v.crf, audio_bitrate=v.audio_bitrate,
+            max_duration=max_duration, crf=v.crf, audio_bitrate=v.audio_bitrate,
             hook_lines=media.wrap_hook(analysis.get("hook_text", "")) if v.hook_text else None,
             hook_seconds=v.hook_seconds, watermark=v.watermark, font=font,
         )
@@ -151,44 +162,96 @@ class Reeler:
                 "reel": str(out)}
 
     # ---- 4. post ---------------------------------------------------------
-    def post(self, vid: int, uploader) -> dict:
+    @staticmethod
+    def as_map(uploader) -> dict:
+        """Accept one uploader or {platform: uploader}."""
+        if isinstance(uploader, dict):
+            return uploader
+        return {getattr(uploader, "platform", "instagram"): uploader}
+
+    @staticmethod
+    def all_dry(uploaders: dict) -> bool:
+        return all(u.name == "dry-run" for u in uploaders.values())
+
+    def _pick_audio(self, uploader, analysis: dict) -> dict | None:
         cfg = self.cfg
+        if cfg.audio.mode != "trending" or not uploader.supports_trending_audio:
+            return None
+        used = recently_used_audio(self.state.last_posted(int(cfg.audio.avoid_repeat_posts)))
+        terms = analysis.get("music_search_terms", [])
+        if hasattr(uploader, "pick_audio"):  # app-login uploader: Instagram's in-app music catalog
+            try:
+                choice, track = uploader.pick_audio(terms, used)
+                if choice:
+                    return dict(choice, _track=track)
+            except Exception as exc:  # noqa: BLE001 - music is optional
+                log.warning("could not pick trending music: %s", exc)
+            return None
+        if self.graph is not None:
+            return pick_trending_audio(self.graph, cfg, terms, used)
+        return None
+
+    def post(self, vid: int, uploader) -> dict:
+        """Post one clip to every platform that hasn't had it yet (each platform gets each clip once)."""
+        uploaders = self.as_map(uploader)
         row = self.state.get(vid)
         if row["status"] not in ("prepared", "failed") or not row["processed"] or not Path(row["processed"]).exists():
             self.prepare(vid)
             row = self.state.get(vid)
         analysis = json.loads(row["analysis"] or "{}")
-
-        audio = None
-        if cfg.audio.mode == "trending" and uploader.supports_trending_audio:
-            used = recently_used_audio(self.state.last_posted(int(cfg.audio.avoid_repeat_posts)))
-            terms = analysis.get("music_search_terms", [])
-            if hasattr(uploader, "pick_audio"):  # app-login uploader: Instagram's in-app music catalog
-                try:
-                    choice, track = uploader.pick_audio(terms, used)
-                    if choice:
-                        audio = dict(choice, _track=track)
-                except Exception as exc:  # noqa: BLE001 - music is optional
-                    log.warning("could not pick trending music: %s", exc)
-            elif self.graph is not None:
-                audio = pick_trending_audio(self.graph, cfg, terms, used)
+        todo = [(p, u) for p, u in uploaders.items() if not self.state.platform_posted(vid, p)]
 
         self.state.update(vid, status="posting", attempts=row["attempts"] + 1)
-        try:
-            res = uploader.upload(
-                Path(row["processed"]), row["caption"], cover=Path(row["cover"]) if row["cover"] else None,
-                thumb_offset_ms=int(float(analysis.get("cover_time", 0)) * 1000), audio=audio,
-            )
-        except Exception as exc:
-            self.state.update(vid, status="failed", error=str(exc)[:1000])
-            raise
-        self.state.update(vid, status="posted", media_id=res.media_id, permalink=res.permalink,
-                          audio=res.audio_used, posted_at=time.time(),
-                          error="; ".join(res.notes) or None)
-        if uploader.name != "dry-run":
-            self._after_post(Path(row["path"]), vid)
-        return {"id": vid, "media_id": res.media_id, "permalink": res.permalink,
-                "audio": res.audio_used, "notes": res.notes}
+        results: dict[str, dict] = {}
+        errors: dict[str, Exception] = {}
+        notes: list[str] = []
+        for platform, up in todo:
+            audio = self._pick_audio(up, analysis)
+            extra = {}
+            if platform == "youtube":
+                from reeler.uploaders.youtube import youtube_metadata
+                extra["meta"] = youtube_metadata(analysis, row["caption"] or "", json.loads(row["hashtags"] or "[]"),
+                                                 self.cfg)
+            try:
+                res = up.upload(
+                    Path(row["processed"]), row["caption"], cover=Path(row["cover"]) if row["cover"] else None,
+                    thumb_offset_ms=int(float(analysis.get("cover_time", 0)) * 1000), audio=audio, **extra,
+                )
+            except Exception as exc:  # noqa: BLE001 - record, try the other platforms, report below
+                log.error("%s upload failed for clip %s: %s", platform, vid, exc)
+                errors[platform] = exc
+                self.state.record_post(vid, platform, "failed", error=str(exc)[:1000])
+                continue
+            if up.name != "dry-run":
+                self.state.record_post(vid, platform, "posted", media_id=res.media_id, permalink=res.permalink,
+                                       audio=res.audio_used, error="; ".join(res.notes) or None)
+            results[platform] = {"media_id": res.media_id, "permalink": res.permalink,
+                                 "audio": res.audio_used, "notes": res.notes}
+            notes += [f"{platform}: {n}" if len(uploaders) > 1 else n for n in res.notes]
+
+        dry = self.all_dry(uploaders)
+        complete = not errors and (dry or all(self.state.platform_posted(vid, p) for p in uploaders))
+        if not results and errors and not any(self.state.platform_posted(vid, p) for p in uploaders):
+            first = next(iter(errors.values()))
+            self.state.update(vid, status="failed", error=str(first)[:1000])
+            raise first
+        primary = results.get("instagram") or next(iter(results.values()), {})
+        fields = {}
+        if primary:
+            fields.update(media_id=primary.get("media_id"), permalink=primary.get("permalink"))
+        if "instagram" in results:
+            fields["audio"] = results["instagram"].get("audio")
+        if complete:
+            self.state.update(vid, status="posted", posted_at=time.time(), error="; ".join(notes) or None, **fields)
+            if not dry:
+                self._after_post(Path(row["path"]), vid)
+        else:
+            msg = "; ".join(f"{p} failed: {e}" for p, e in errors.items())
+            self.state.update(vid, status="failed", error=msg[:1000], **fields)
+            notes.append(f"{msg} (will try that platform again later)")
+        return {"id": vid, "media_id": primary.get("media_id"), "permalink": primary.get("permalink"),
+                "audio": primary.get("audio") if "instagram" in results else None, "notes": notes,
+                "platforms": results, "complete": complete}
 
     def _after_post(self, src: Path, vid: int) -> None:
         """Best-effort cleanup. Never raises: the Reel is already live at this point."""
@@ -236,6 +299,7 @@ class Reeler:
             self.state.kv_set("cleanup_later", left)
 
     def post_next(self, uploader) -> dict | None:
+        """Local-folder mode: post the next clip in the queue."""
         self.scan()
         if time.time() - (self.state.kv_get("trends_refreshed_at", 0) or 0) > self.cfg.trends.refresh_hours * 3600:
             try:
@@ -266,7 +330,9 @@ class Reeler:
         today = datetime.fromtimestamp(now_ts, tz).date()
         posted = self.state.posted_since(now_ts - 2 * 86400)
         today_count = sum(1 for r in posted if datetime.fromtimestamp(r["posted_at"], tz).date() == today)
-        if uploader.name != "dry-run" and not ignore_cap:
+        uploaders = self.as_map(uploader)
+        dry = self.all_dry(uploaders)
+        if not dry and not ignore_cap:
             if today_count >= int(cfg.schedule.max_posts_per_day):
                 return {"skipped": f"daily cap reached ({today_count} today)"}
             if posted and now_ts - posted[-1]["posted_at"] < int(cfg.schedule.min_gap_minutes) * 60:
@@ -312,7 +378,7 @@ class Reeler:
                 local.unlink(missing_ok=True)
                 continue
             try:
-                res = self.post(vid, uploader)
+                res = self.post(vid, uploaders)
             except Exception:
                 fails[f["id"]] = fails.get(f["id"], 0) + 1
                 if fails[f["id"]] >= 3:
@@ -320,8 +386,15 @@ class Reeler:
                 self.state.kv_set("drive_fail", fails)
                 self.state.kv_set("drive_done", done)
                 raise
-            if uploader.name != "dry-run":
+            if not dry and res.get("complete", True):
                 done[f["id"]] = "posted"
+                self.state.kv_set("drive_done", done)
+            elif not dry:  # posted on some platforms only: retry the rest, give up after 3 tries
+                fails[f["id"]] = fails.get(f["id"], 0) + 1
+                if fails[f["id"]] >= 3:
+                    done[f["id"]] = "partial"
+                    self._after_post(local, vid)
+                self.state.kv_set("drive_fail", fails)
                 self.state.kv_set("drive_done", done)
             res.update({"file": f["name"], "remaining": len(todo) - 1})
             return res

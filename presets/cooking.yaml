@@ -1,0 +1,36 @@
+# Ready-made settings for a cooking / recipe page. Use it with:  preset: cooking
+niche: "quick cooking recipes and food clips"
+youtube:
+  category_id: "26"   # Howto & Style
+
+niche_profile:
+  topic: "cooking"
+  categories: [quick_recipe, dessert, street_food, healthy, comfort_food, baking, technique,
+               satisfying, fail, taste_test, other]
+  hook_examples: ["ONLY 3 INGREDIENTS", "YOU'VE BEEN DOING IT WRONG", "MAKE THIS TONIGHT", "WAIT FOR THE CHEESE PULL"]
+  music: [chill lofi, upbeat pop, acoustic, jazz, feel good]
+  offline:
+    captions:
+      hype: ["This one is dangerously good 🔥", "Had to share this recipe 😍", "Best {topic} hack this week 🚀"]
+      intense: ["Watch closely 👀", "The final result 🤤", "Trust the process 🍳"]
+      chill: ["Save this for dinner tonight 🍝", "Simple, cozy and so good 🌿", "Comfort food at its finest ✨"]
+      cinematic: ["Food as art 🎬", "Look at that texture 🤯"]
+    questions: ["Would you eat this? 👇", "Rate this 1-10 👇", "What would you add? 👇",
+                "Tag someone who should cook this for you 👇"]
+
+hashtags:
+  broad: {food: 0.9, cooking: 0.95, recipe: 0.9, foodie: 0.8, homecooking: 0.7, easyrecipes: 0.75}
+  niche: {quickrecipes: 0.6, dinnerideas: 0.6, foodtok: 0.5, cookingathome: 0.55, recipeideas: 0.5,
+          mealprep: 0.45, simplerecipes: 0.45}
+  categories:
+    quick_recipe: {quickrecipes: 0.6, 15minutemeals: 0.45, easymeals: 0.5}
+    dessert: {dessert: 0.7, sweettooth: 0.5, baking: 0.6}
+    street_food: {streetfood: 0.7, foodlover: 0.5}
+    healthy: {healthyrecipes: 0.65, healthyeating: 0.6, mealprep: 0.5}
+    comfort_food: {comfortfood: 0.6, homemade: 0.55}
+    baking: {baking: 0.7, homebaking: 0.5, bread: 0.45}
+    technique: {cookingtips: 0.6, kitchenhacks: 0.55, chefskills: 0.4}
+    satisfying: {foodporn: 0.6, satisfyingfood: 0.45}
+    fail: {cookingfail: 0.45, kitchenfail: 0.4}
+    taste_test: {tastetest: 0.5, foodreview: 0.55}
+    other: {homecooking: 0.6, foodie: 0.7}

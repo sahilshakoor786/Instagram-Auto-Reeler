@@ -3,5 +3,8 @@ requests>=2.31
 PyYAML>=6.0
 python-dotenv>=1.0
 tzdata>=2024.1; sys_platform == "win32"
+# YouTube Shorts (official YouTube Data API) - only needed with platforms: [youtube]
+google-api-python-client>=2.100
+google-auth-oauthlib>=1.2
 # Optional: only needed for `uploader: instagrapi` (unofficial API, ban risk)
 # instagrapi>=2.1

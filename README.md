@@ -1,80 +1,139 @@
-# Instagram Auto Reeler 🎮→📱
+# Auto Poster: Instagram Reels + YouTube Shorts 📱
 
-Drop your GTA 6 gameplay clips (~25 s each) into a folder. This tool turns each one into a
-Reel and posts it to your Instagram account on a schedule. For every clip it:
+Put your short videos in a Google Drive folder (or a folder on your PC). This program posts them for
+you, a few every day, to **Instagram Reels**, **YouTube Shorts**, or **both**.
 
-1. **Looks at the clip.** It sends keyframes to Claude, which works out what happens
-   (police chase, stunt, Vice City sunset…), how intense it is, and which frame makes the best cover.
-2. **Makes it Reels-ready.** It converts the clip to 1080×1920 9:16 H.264/AAC, keeps the full gameplay
-   on a blurred background, adds a bold on-screen hook for the first ~2.5 s ("COPS HAD NO CHANCE")
-   and an optional watermark.
-3. **Writes the caption.** You get a punchy line, a question that invites comments, and your signature.
-4. **Picks trending hashtags for that clip.** It mixes one broad anchor (#gta6), a tag for the clip's
-   category, the AI's pick, a tag that is trending right now, and a niche tag. Instagram now allows
-   5 hashtags, and the tool stops the same set repeating across posts.
-5. **Attaches a trending song that fits the vibe** (phonk for chases, synthwave for night drives, …).
-   This uses Instagram's official Audio API. If no track can be attached, it posts with the game audio.
-6. **Uploads it** through the **official Instagram Graph API**. This is a resumable upload straight from
-   your PC, with no video hosting needed. It posts at the times you set, moves posted clips to
-   `videos/posted/`, and never posts the same clip twice, even if you rename it.
+It works for **any topic**: gaming, cooking, football, pets, motivation, makeup, cars... you just
+type what your videos are about. For every video it:
 
-```
-videos/*.mp4 ─► scan ─► Claude vision ─► ffmpeg 9:16 render + hook ─► caption + trending tags
-                                                                     └► trending audio pick
-                                                     scheduler ─► Instagram Graph API (Reels)
-```
-
-## How "trending" works
-
-| What | Source |
-|---|---|
-| Hashtags | A built-in GTA 6 tag list (`reeler/data/gta6_tags.yaml`), re-scored every 24 h from **live Instagram data**. The tool reads the top and recent posts for #gta6, #vicecity and similar tags, measures engagement and how many posts appeared in the last 24 h, and finds **new tags that keep showing up on top-performing GTA 6 posts** (e.g. a new `#gta6trailer3`). Spam tags (#fyp, #follow4follow…) are blocked. Run `python -m reeler trends --refresh` to see the ranking. |
-| Audio | Instagram's Audio API trending list, searched with vibe words Claude picks for each clip. A track is not reused within the last 6 posts. |
-| Copy | Claude writes hooks and captions in current Reels style. Without an API key, built-in templates based on the clip's motion and loudness are used instead. |
-
-Instagram allows 30 *unique* hashtag lookups per 7 days. The tool caches hashtag IDs and keeps a
-weekly budget (25 by default), so it never goes over that limit.
+- makes it full-screen vertical (9:16) with a short, eye-catching text at the start,
+- writes a caption, a question for comments, and 5 hashtags that fit your topic,
+- adds a trending Instagram song (Instagram only),
+- posts it at good times during the day, and **never posts the same video twice** on the same platform.
 
 ---
 
-## 🖥️ Easiest: run it on your Windows PC (no Facebook needed)
+## ▶️ Start (Windows)
 
-1. Download the project: on GitHub, open **Code → Download ZIP**, then unzip it (for example to `Documents\Instagram-Auto-Reeler`).
-2. Double-click **`START_HERE.bat`**.
-   - The first time, it installs Python and ffmpeg. When it says so, close the window and double-click the file again.
-3. Type your Instagram username and password when asked. They are saved only on your PC, in `.env`.
-   If Instagram sends you a security code, type it into the window.
-4. Choose how many Reels to post right away. After that it keeps posting **5 a day** from your Google Drive
-   folder, with a trending Instagram song, a hook text overlay, a caption and 5 hashtags, until all clips
-   are posted. Leave the window open; if you close it, double-click `START_HERE.bat` to pick up where it stopped.
+1. On GitHub, click the green **Code** button → **Download ZIP**. Unzip it, for example to
+   `Documents\Instagram-Auto-Reeler`.
+2. Open that folder and double-click **`START_HERE.bat`**.
+   - The very first time it installs what it needs. If it says *"CLOSE this window and double-click
+     START_HERE.bat again"*, do exactly that.
+3. Answer the questions (type, then press **Enter**):
+   - **Where are your videos?** Paste your Google Drive folder link, or type a folder on your PC.
+   - **What are they about?** Pick a number (GTA 6, cooking, football, pets, motivation) or type
+     your own topic, e.g. `makeup tutorials`.
+   - **How many posts per day?** 5 is a good, safe number.
+   - **Where to post?** 1 = Instagram, 2 = YouTube Shorts, 3 = both.
+4. **Instagram login:** a browser window opens. Log in to Instagram like normal. The program
+   continues by itself. You only do this once.
+5. **YouTube login** (only if you chose YouTube): a browser window opens. Pick your Google account
+   and channel and click **Allow**. Once only. (First do the one-time setup below.)
+6. Leave the black window open. It keeps posting every day. If you close it or the PC restarts,
+   double-click `START_HERE.bat` again: it continues where it stopped, without reposting anything.
 
-To change the posting times or how many Reels go out per day, edit `config.pc.yaml`.
-This mode logs in like the Instagram app does (unofficial). Keep the pace human.
+**Next time** you start it, it shows your saved answers. Press **Enter** to use them, or type
+**C** to change them.
 
-## ☁️ Cloud mode: post from Google Drive with no PC needed
+### Google Drive folder
+In Google Drive, right-click the folder → **Share** → under *General access* choose
+**Anyone with the link** → **Copy link**. Paste that link when asked. New videos you add to the
+folder are picked up automatically.
 
-GitHub Actions runs `.github/workflows/autopost.yml` 4 times a day. Each run:
+### Several accounts or topics
+When it asks you to choose a project, type **N** for a new one (e.g. one for GTA, one for cooking).
+Every project has its own login, its own videos and its own history, so they never mix.
 
-1. Picks the next clip from your Google Drive folder that hasn't been posted yet.
-2. Downloads only that clip.
-3. Processes it exactly like the desktop version (AI caption, hook text, trending hashtags and audio).
-4. Posts it.
-5. Commits the posting history (`state/state.db`) back to the repo, so no clip is ever posted twice.
+### How many per day?
+About **3 to 10 a day** is safe. If you type a big number (like 100), the program warns you:
+posting that fast looks like spam and can get an account blocked from posting. When you ask it to
+post several videos *right now*, it waits **20 minutes between each one** to keep the account safe.
 
-Setup:
-1. Share the Drive folder as **Anyone with the link → Viewer**, and set its link in `config.cloud.yaml`.
-   New clips you add to the folder are picked up automatically.
-2. Merge this branch into `main`. GitHub only runs scheduled workflows from the default branch.
-3. In GitHub, go to **Repo → Settings → Secrets and variables → Actions → New repository secret** and add:
-   `IG_USER_ID`, `IG_ACCESS_TOKEN` (see step 2 below for how to get them), `ANTHROPIC_API_KEY`
-   (optional), and `GOOGLE_API_KEY` (optional; makes listing new Drive uploads more reliable).
-4. Go to **Actions → Auto-post GTA 6 Reel → Run workflow**, keep "Dry run" ticked, and run it. When it
-   finishes, download the `reel-preview` artifact and read the caption in the log.
-5. If the preview looks good, you're done: the schedule takes over. To post one right away, run the
-   workflow again with "Dry run" unticked.
+### Better captions (optional)
+Captions work without anything extra. For smarter captions that describe what happens in each
+video, get a key at <https://console.anthropic.com>, open the file `.env` in the program folder with
+Notepad, and put it after `ANTHROPIC_API_KEY=`. Save. (Never share this key with anyone.)
 
-To change the posting times, edit the `cron` lines in the workflow. They are in UTC: India time minus
-5:30. Each run uses about 3–5 of the 2,000 free GitHub Actions minutes a private repo gets per month.
+---
+
+## 🔴 Turn on YouTube Shorts (one time, about 10 minutes)
+
+YouTube only allows uploads through Google's official way, so you need a free "key file" from Google.
+
+1. Go to <https://console.cloud.google.com> and sign in with the Google account of your YouTube channel.
+2. At the top, click the project list → **New project** → name it `My Auto Poster` → **Create**.
+3. In the search bar type **YouTube Data API v3** → open it → click **Enable**.
+4. Left menu: **Google Auth Platform** (or **APIs & Services → OAuth consent screen**) → **Get started**.
+   App name: `My Auto Poster`, your email, audience **External**, then **Create**.
+5. Open **Audience** → click **Publish app** → **Confirm**. (Otherwise Google logs you out every 7 days.)
+6. Open **Clients** (or **Credentials**) → **Create client** → type **Desktop app** → **Create** →
+   **Download JSON**.
+7. Rename the downloaded file to **`client_secret.json`** and put it in the program folder
+   (next to `START_HERE.bat`).
+8. Start `START_HERE.bat`, choose your project, type **C**, and pick **3** (both) or **2** (YouTube).
+
+When you log in, Google may say *"Google hasn't verified this app"*. That's your own app: click
+**Advanced** → **Go to My Auto Poster** → **Allow**.
+
+> ⚠️ **Important Google rule:** videos uploaded by a brand-new Google project are put on
+> **Private** until Google approves the project. Approval is free: fill in the
+> [YouTube API audit form](https://support.google.com/youtube/contact/yt_api_form) (say it is a
+> personal tool that uploads your own videos to your own channel). Until then, your Shorts are
+> uploaded but only you can see them, and you can make them public yourself in YouTube Studio.
+> The program tells you when this happens.
+
+A video counts as a Short when it is vertical (or square) and **up to 3 minutes** long. The program
+makes every video vertical, keeps it under that limit, and adds **#Shorts**. YouTube also limits
+how many uploads a new Google project can make per day, so keep the number per day modest.
+
+---
+
+## ⬆️ Updating from the old GTA-only version
+
+1. Close the black window if it is running.
+2. Download the new ZIP (green **Code** button → **Download ZIP**) and unzip it.
+3. Copy everything from the new folder **into your old folder** and choose **Replace** when Windows
+   asks. **Do not delete** the `.reeler` folder or the `.env` file in your old folder: they hold your
+   Instagram login and your posting history. (If you can't see `.reeler`, that's fine: just don't delete anything.)
+4. Double-click `START_HERE.bat`. Your GTA setup becomes the project **gta6** automatically, with the
+   same Drive folder, login and history, so nothing gets posted twice. Press **Enter** to keep going.
+
+---
+
+## Ready-made topics (presets)
+
+`presets/` has ready-made settings (categories, caption style, hashtags, music vibe) for:
+**gta6**, **cooking**, **football**, **pets**, **motivation**. For any other topic just type it;
+the program builds a matching hashtag list from your topic (and, with a Claude key, asks Claude once
+for a full starter list of hashtags, categories and hook styles, then reuses it).
+
+---
+
+## For advanced users
+
+Everything below is optional. `START_HERE.bat` runs `python -m reeler start`; each project's settings
+are saved in `.reeler/profiles/<name>.yaml` and can be used with any command via `-p <name>`, e.g.
+`python -m reeler -p cooking queue`. The project's history is in `.reeler/<name>/state.db`, its
+Instagram session in `.reeler/<name>/account.env`, its YouTube login in
+`.reeler/<name>/youtube_token.json`. The old `config.pc.yaml` still works:
+`python -m reeler -c config.pc.yaml pc-run`.
+
+### How "trending" works
+
+| What | Source |
+|---|---|
+| Hashtags | Seed list for your niche (preset, your `trends.yaml`, a Claude starter kit, or words from your niche). With the Instagram Graph API connected and `trends.live_research: true`, it is re-scored every 24 h from live Instagram data (engagement + posts in the last 24 h) and finds new tags that keep showing up on top posts in **your** niche. Spam tags (#fyp, #follow4follow…) are blocked. |
+| Audio | Instagram's trending music, searched with vibe words that fit the clip and your niche. A track is not reused within the last 6 posts. |
+| Copy | Claude writes hooks, captions and YouTube titles for your niche. Without an API key, built-in templates that work for any topic are used. |
+
+### ☁️ Cloud mode (GitHub Actions, currently switched off)
+
+`.github/workflows/autopost.yml` can post from a Google Drive folder without a PC
+(`config.cloud.yaml`, official Instagram Graph API). Its schedule is off because the PC runner does
+the posting. To use it: set `preset`/`niche` and the Drive link in `config.cloud.yaml`, add the
+secrets `IG_USER_ID`, `IG_ACCESS_TOKEN` (and optionally `ANTHROPIC_API_KEY`, `GOOGLE_API_KEY`) in
+**Repo → Settings → Secrets and variables → Actions**, and uncomment the `schedule:` lines.
 
 ## 1. Install
 
@@ -92,7 +151,7 @@ pip install -r requirements.txt
 python -m reeler init          # creates config.yaml, .env and videos/
 ```
 
-Copy your clips into `videos/`. Sub-folders are fine.
+Copy your clips into `videos/`. Sub-folders are fine. Set `niche:` (or `preset:`) in `config.yaml`.
 
 ## 2. Connect Instagram (official API, one-time, about 15 minutes)
 
@@ -152,7 +211,8 @@ To run it automatically, pick one option:
 | Command | What it does |
 |---|---|
 | `queue` | Clips waiting, recently posted (with links and the song used), and the next slot |
-| `set-caption 5 "text\nsecond line #gta6"` | Override the caption of one clip |
+| `set-caption 5 "text\nsecond line #tag"` | Override the caption of one clip |
+| `projects` | List the projects made by START_HERE (use any command with `-p <name>`) |
 | `skip 5` / `retry 5` | Never post a clip / re-queue a failed one |
 | `prepare 5 --reanalyse` | Re-run the AI on a clip |
 
@@ -168,17 +228,22 @@ video:
   fit: blur          # blur | crop (fill screen, cuts edges) | pad
   hook_text: true
   watermark: "@yourhandle"
+niche: "football skills"   # or preset: football
+posts_per_day: 5
+platforms: [instagram, youtube]
 caption:
-  signature: "Follow @yourhandle for daily GTA 6 clips 🎮"
+  signature: "Follow @yourhandle for daily clips"
 audio:
-  mode: trending     # or off = keep the game sound
+  mode: trending     # or off = keep the clip's own sound
   audio_volume: 35   # song
-  video_volume: 70   # gameplay
+  video_volume: 70   # the clip's own sound
 order: random
 ```
 
-Add your own hashtags by copying `reeler/data/gta6_tags.yaml` to `trends.yaml` in the project root
-and editing it.
+Hashtags for your niche come from (first match wins): your own `trends.yaml` in the project's
+work folder (same format as `reeler/data/gta6_tags.yaml`), `hashtags:` in the config or preset,
+a starter list Claude writes once for your niche (cached in `niche_kit.json`), or tags made from
+the words of your niche.
 
 ## Good to know
 
@@ -190,9 +255,8 @@ and editing it.
 - **Unofficial uploader:** `uploader: instagrapi` (`pip install instagrapi`, then put your username and
   password in `.env`) works without a Meta app. It goes against Instagram's terms and can trigger
   checkpoints or bans, and it can't attach trending audio. Use it at your own risk.
-- **Content:** Rockstar generally allows sharing gameplay footage. Don't post leaked or pre-release
-  material you don't have the rights to.
-- All state lives in `.reeler/state.db`. Delete the folder to start fresh.
+- **Content:** only post videos you have the rights to (your own, or allowed by the owner).
+- All state lives in `.reeler/`. Each project has its own folder there.
 
 ## Development
 
@@ -200,9 +264,11 @@ and editing it.
 pip install -e ".[dev]" && pytest -q
 ```
 
-The tests cover the scheduler, hashtag scoring and selection, live trend discovery (mocked), the
-Graph API resumable upload and its audio fallback (mocked HTTP), the Claude request shape (mocked
-HTTP), ffmpeg rendering, and a full dry-run post.
+The tests cover the scheduler and pacing, presets and niche handling, hashtag scoring and selection,
+live trend discovery (mocked), the Graph API upload and its audio fallback, the YouTube upload
+(mocked API), per-platform history (each clip once per platform), migration of old databases and
+the old single GTA setup, the setup questions, the Claude request shape, ffmpeg rendering, and a
+full dry-run post.
 
 ### Built on
 

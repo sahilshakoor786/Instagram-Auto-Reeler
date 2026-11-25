@@ -9,3 +9,6 @@ videos/
 *.session.json
 .pytest_cache/
 .cache/
+client_secret*.json
+youtube_token.json
+account.env

@@ -1,8 +1,8 @@
 @echo off
-title Instagram Auto Reeler
+title Auto Poster - Instagram Reels + YouTube Shorts
 cd /d "%~dp0"
 echo.
-echo  ==== Instagram Auto Reeler ====
+echo  ==== Auto Poster: Instagram Reels + YouTube Shorts ====
 echo.
 
 py -3 --version >nul 2>nul
@@ -33,7 +33,7 @@ if not exist .venv\Scripts\python.exe (
 .venv\Scripts\python -m pip install -q -r requirements.txt "instagrapi[video]" playwright
 .venv\Scripts\python -m pip install -q --no-deps "moviepy==2.2.1"
 
-set /p NOW="How many Reels should I post RIGHT NOW before the daily schedule starts? (e.g. 1): "
-if "%NOW%"=="" set NOW=1
-.venv\Scripts\python -m reeler -c config.pc.yaml pc-run --now %NOW%
+rem The program asks its questions itself (videos folder, topic, posts per day, where to post)
+rem and remembers the answers. Next time you can keep them or change them.
+.venv\Scripts\python -m reeler start
 pause

@@ -1,4 +1,9 @@
-# Run on your own PC with START_HERE.bat. Logs in to Instagram directly (no Facebook needed).
+# The original single-project GTA 6 setup. START_HERE.bat now uses "projects" instead
+# (.reeler/profiles/*.yaml) and turns this setup into the project "gta6" automatically.
+# Still works directly:  python -m reeler -c config.pc.yaml pc-run
+
+preset: gta6            # niche, categories, hashtags and caption style (see presets/gta6.yaml)
+platforms: [instagram]  # add youtube for YouTube Shorts too (README -> "Turn on YouTube Shorts")
 
 drive:
   folder: "https://drive.google.com/drive/folders/1f1X03l5Xg80wq-fnJOz0RWbk0SiTf68k"

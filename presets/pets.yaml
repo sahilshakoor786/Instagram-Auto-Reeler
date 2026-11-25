@@ -1,0 +1,22 @@
+# Ready-made settings for a funny / cute pets page. Use it with:  preset: pets
+niche: "funny and cute pets (cats and dogs)"
+youtube:
+  category_id: "15"   # Pets & Animals
+
+niche_profile:
+  topic: "pets"
+  categories: [funny_cat, funny_dog, cute, zoomies, sleeping, playing, talking, fail, wholesome, other]
+  hook_examples: ["WAIT FOR HIS FACE", "SHE KNEW EXACTLY WHAT SHE DID", "THE ZOOMIES HIT", "TOO CUTE TO HANDLE"]
+  music: [funny, cute, upbeat, lofi, cartoon]
+
+hashtags:
+  broad: {cats: 0.9, dogs: 0.9, pets: 0.85, funnyanimals: 0.8, catsofinstagram: 0.75, dogsofinstagram: 0.75}
+  niche: {funnycats: 0.6, funnydogs: 0.6, cutepets: 0.55, petlovers: 0.5, catlover: 0.5, doglover: 0.5}
+  categories:
+    funny_cat: {funnycats: 0.65, catvideos: 0.5}
+    funny_dog: {funnydogs: 0.65, dogvideos: 0.5}
+    cute: {cuteanimals: 0.6, cutepets: 0.55}
+    zoomies: {zoomies: 0.45}
+    sleeping: {sleepycat: 0.4, sleepydog: 0.4}
+    wholesome: {wholesome: 0.45, petlove: 0.45}
+    other: {pets: 0.7}
