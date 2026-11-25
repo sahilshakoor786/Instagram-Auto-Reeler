@@ -57,6 +57,16 @@ def youtube_metadata(analysis: dict, caption: str, hashtags: list[str], cfg) -> 
             "category_id": str(cfg.youtube.category_id)}
 
 
+def find_client_secrets(cfg) -> Path:
+    """client_secret.json - or the file exactly as Google names it when downloaded
+    (client_secret_1234-abc.apps.googleusercontent.com.json, sometimes with an extra .json)."""
+    wanted = cfg.resolve(cfg.youtube.client_secrets)
+    if wanted.exists():
+        return wanted
+    found = sorted(p for p in cfg.root.glob("client_secret*.json*") if p.is_file())
+    return found[0] if found else wanted
+
+
 class YouTubeUploader(Uploader):
     name = "youtube"
     platform = "youtube"
@@ -65,7 +75,7 @@ class YouTubeUploader(Uploader):
     def __init__(self, cfg, service=None):
         super().__init__(cfg)
         self.token_file = cfg.work_path / "youtube_token.json"
-        self.secrets_file = cfg.resolve(cfg.youtube.client_secrets)
+        self.secrets_file = find_client_secrets(cfg)
         self._service = service
 
     # ---- sign-in -------------------------------------------------------------

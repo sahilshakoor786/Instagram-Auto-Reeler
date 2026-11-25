@@ -45,8 +45,12 @@ def require_ffmpeg() -> None:
             raise MediaError(f"'{tool}' not found on PATH. Install it: {hint}")
 
 
-def _run(cmd: list[str], cwd: Path | None = None) -> subprocess.CompletedProcess:
-    proc = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True, encoding="utf-8", errors="replace")
+def _run(cmd: list[str], cwd: Path | None = None, timeout: float = 1800) -> subprocess.CompletedProcess:
+    try:
+        proc = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True, encoding="utf-8", errors="replace",
+                              timeout=timeout)
+    except subprocess.TimeoutExpired as exc:
+        raise MediaError(f"{cmd[0]} took longer than {timeout / 60:.0f} minutes - skipping this clip") from exc
     if proc.returncode != 0:
         tail = "\n".join(proc.stderr.strip().splitlines()[-15:])
         raise MediaError(f"{cmd[0]} failed ({proc.returncode}):\n{tail}")
@@ -184,7 +188,7 @@ def render_reel(
     graph = ";".join(chain)
 
     duration = min(info.duration or max_duration, max_duration)
-    cmd = ["ffmpeg", "-y", "-hide_banner", "-loglevel", "error", "-i", str(src.resolve())]
+    cmd = ["ffmpeg", "-nostdin", "-y", "-hide_banner", "-loglevel", "error", "-i", str(src.resolve())]
     if not info.has_audio:
         cmd += ["-f", "lavfi", "-i", "anullsrc=channel_layout=stereo:sample_rate=48000"]
     cmd += [
@@ -215,7 +219,7 @@ def extract_frames(src: Path, out_dir: Path, count: int = 6, width: int = 768) -
         t = dur * (i + 0.5) / count
         fp = out_dir / f"frame_{i:02d}.jpg"
         _run([
-            "ffmpeg", "-y", "-hide_banner", "-loglevel", "error", "-ss", f"{t:.2f}", "-i", str(src),
+            "ffmpeg", "-nostdin", "-y", "-hide_banner", "-loglevel", "error", "-ss", f"{t:.2f}", "-i", str(src),
             "-frames:v", "1", "-vf", f"scale={width}:-2", "-q:v", "4", str(fp),
         ])
         frames.append((round(t, 2), fp))
@@ -224,10 +228,14 @@ def extract_frames(src: Path, out_dir: Path, count: int = 6, width: int = 768) -
 
 def grab_cover(src: Path, dst: Path, t: float) -> Path:
     _run([
-        "ffmpeg", "-y", "-hide_banner", "-loglevel", "error", "-ss", f"{max(t, 0):.2f}", "-i", str(src),
+        "ffmpeg", "-nostdin", "-y", "-hide_banner", "-loglevel", "error", "-ss", f"{max(t, 0):.2f}", "-i", str(src),
         "-frames:v", "1", "-q:v", "2", str(dst),
     ])
     return dst
+
+
+STATS_SECONDS = 90   # only look at the part of the clip that gets posted
+STATS_TIMEOUT = 120  # seconds; the stats are optional
 
 
 def energy_stats(src: Path) -> dict:
@@ -236,23 +244,24 @@ def energy_stats(src: Path) -> dict:
     stats = {"duration": round(info.duration, 2), "scene_cuts_per_sec": 0.0, "mean_volume_db": None}
     try:
         proc = subprocess.run(
-            ["ffmpeg", "-hide_banner", "-i", str(src), "-vf", "select='gt(scene,0.25)',showinfo",
-             "-an", "-f", "null", os.devnull],
-            capture_output=True, text=True, encoding="utf-8", errors="replace",
+            ["ffmpeg", "-nostdin", "-hide_banner", "-t", str(STATS_SECONDS), "-i", str(src),
+             "-vf", "scale=320:-2,select='gt(scene,0.25)',showinfo", "-an", "-f", "null", os.devnull],
+            capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=STATS_TIMEOUT,
         )
         cuts = proc.stderr.count("pts_time:")
-        stats["scene_cuts_per_sec"] = round(cuts / max(info.duration, 1), 3)
-    except OSError:
-        pass
+        stats["scene_cuts_per_sec"] = round(cuts / max(min(info.duration, STATS_SECONDS), 1), 3)
+    except (OSError, subprocess.TimeoutExpired):
+        pass  # only a hint for offline captions - never worth blocking a post
     if info.has_audio:
         try:
             proc = subprocess.run(
-                ["ffmpeg", "-hide_banner", "-i", str(src), "-af", "volumedetect", "-vn", "-f", "null", os.devnull],
-                capture_output=True, text=True, encoding="utf-8", errors="replace",
+                ["ffmpeg", "-nostdin", "-hide_banner", "-t", str(STATS_SECONDS), "-i", str(src),
+                 "-af", "volumedetect", "-vn", "-f", "null", os.devnull],
+                capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=STATS_TIMEOUT,
             )
             m = re.search(r"mean_volume:\s*(-?[\d.]+) dB", proc.stderr)
             if m:
                 stats["mean_volume_db"] = float(m.group(1))
-        except OSError:
+        except (OSError, subprocess.TimeoutExpired):
             pass
     return stats
