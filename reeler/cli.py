@@ -328,8 +328,8 @@ def cmd_run(args) -> int:
 def cmd_cloud_post(args) -> int:
     """One run of cloud mode (GitHub Actions): next Drive clip -> Reel."""
     cfg, app = _app(args)
-    if not cfg.drive.folder:
-        _p("Set drive.folder in the config first.")
+    if not cfg.drive.folder and not (cfg.get("links") or {}).get("file"):
+        _p("Set drive.folder or links.file in the config first.")
         return 1
     media.require_ffmpeg()
     uploader = _uploader(cfg)

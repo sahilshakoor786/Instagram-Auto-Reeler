@@ -348,15 +348,25 @@ class Reeler:
             if posted and now_ts - posted[-1]["posted_at"] < int(cfg.schedule.min_gap_minutes) * 60:
                 return {"skipped": "too soon after the previous post"}
 
-        manifest = cfg.resolve(d.manifest) if d.get("manifest") else None
-        files = gdrive.list_folder(gdrive.folder_id_from(d.folder), api_key=cfg.secrets.google_api_key,
-                                   manifest=manifest)
+        from reeler import links
+
+        files: list[dict] = []
+        link_file = cfg.resolve(cfg.links.file) if (cfg.get("links") or {}).get("file") else None
+        if link_file is not None:  # the pasted-links queue comes first, in the order it was pasted
+            files += links.expand(links.read_links(link_file), api_key=cfg.secrets.google_api_key)
+        if d.get("folder"):
+            manifest = cfg.resolve(d.manifest) if d.get("manifest") else None
+            files += [dict(f, kind="drive_file") for f in gdrive.list_folder(
+                gdrive.folder_id_from(d.folder), api_key=cfg.secrets.google_api_key, manifest=manifest)
+                if f["id"] not in {x["id"] for x in files}]
         done: dict = self.state.kv_get("drive_done", {}) or {}
         fails: dict = self.state.kv_get("drive_fail", {}) or {}
         todo = [f for f in files if f["id"] not in done]
         if not todo:
-            return {"skipped": f"all {len(files)} Drive clips are already posted"}
-        if cfg.order == "random":
+            return {"skipped": f"all {len(files)} clips are already posted" if files else "no clips or links to post yet"}
+        if cfg.order == "queue":
+            pass  # keep the pasted order
+        elif cfg.order == "random":
             rnd = random.Random(self.state.kv_get("shuffle_seed") or self._new_seed())
             todo.sort(key=lambda f: rnd.random())
         elif cfg.order == "newest":
@@ -370,8 +380,8 @@ class Reeler:
             try:
                 if not local.exists():
                     log.info("downloading %s from Drive", f["name"])
-                    say(f"downloading {f['name']} from Google Drive ...")
-                    gdrive.download(f["id"], local)
+                    say(f"downloading {f.get('url') or f['name']} ...")
+                    links.fetch(dict(f, kind=f.get("kind", "drive_file")), local)
                 media.probe(local)
                 vid, _ = self.state.upsert_video(local)
                 row = self.state.get(vid)

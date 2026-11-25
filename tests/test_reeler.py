@@ -1005,3 +1005,72 @@ def test_youtube_finds_key_file_with_googles_own_name(tmp_path):
     f = tmp_path / "client_secret_1042-abc.apps.googleusercontent.com.json"
     f.write_text("{}")
     assert YouTubeUploader(cfg, service=object()).secrets_file == f
+
+
+# ================================================================ cloud link queue
+def test_link_kinds_and_ids():
+    from reeler import links as L
+    assert L.classify("https://drive.google.com/file/d/1AbCdEfGhIjKlMnOp/view?usp=sharing") == "drive_file"
+    assert L.drive_file_id("https://drive.google.com/open?id=1AbCdEfGhIjKlMnOp") == "1AbCdEfGhIjKlMnOp"
+    assert L.classify("https://drive.google.com/drive/folders/1AbCdEfGhIjKlMnOp") == "drive_folder"
+    assert L.classify("https://www.dropbox.com/s/abc/clip.mp4?dl=0") == "dropbox"
+    assert "dl=1" in L._dropbox_direct("https://www.dropbox.com/s/abc/clip.mp4?dl=0")
+    assert L.classify("https://example.com/v/clip.MP4") == "direct"
+    assert L.classify("https://www.youtube.com/shorts/abc123") == "site"
+    assert L.link_id("https://x/y") == L.link_id(" https://x/y ") and L.link_id("https://x/y").startswith("L")
+
+
+def test_read_links_skips_comments_and_duplicates(tmp_path):
+    from reeler import links as L
+    f = tmp_path / "links.txt"
+    f.write_text("# header\n\nhttps://a/1.mp4\n  https://a/2.mp4  \nhttps://a/1.mp4\n")
+    assert L.read_links(f) == ["https://a/1.mp4", "https://a/2.mp4"]
+
+
+@pytest.mark.skipif(not HAS_FFMPEG, reason="ffmpeg not installed")
+def test_cloud_posts_pasted_links_in_order_once_each(tmp_path, monkeypatch):
+    from reeler import links as L
+
+    clip = make_clip(tmp_path / "src" / "a.mp4")
+    clip2 = make_clip(tmp_path / "src" / "b.mp4", size="720x1280")
+    (tmp_path / "queue").mkdir()
+    (tmp_path / "queue" / "links.txt").write_text(
+        "# my clips\nhttps://example.com/first.mp4\nhttps://drive.google.com/file/d/1DriveFileIdXYZ/view\n")
+    fetched = []
+
+    def fake_fetch(item, dest):
+        fetched.append(item["kind"])
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(clip if item["kind"] == "direct" else clip2, dest)
+        return dest
+
+    monkeypatch.setattr(L, "fetch", fake_fetch)
+    cfg = make_cfg(tmp_path, preset="gta6", platforms=["youtube"], links={"file": "queue/links.txt"},
+                   order="queue", after_post="delete", state_file="state/yt.db", video={"width": 540, "height": 960},
+                   schedule={"max_posts_per_day": 5, "min_gap_minutes": 0, "timezone": "UTC", "post_times": ["10:00"]})
+    yt = _Up("youtube")
+    app = Reeler(cfg)
+    r1 = app.cloud_post({"youtube": yt})
+    r2 = app.cloud_post({"youtube": yt})
+    assert fetched == ["direct", "drive_file"]                    # pasted order
+    assert r1["complete"] and r2["complete"]
+    assert "no clips" in app.cloud_post({"youtube": yt}).get("skipped", "") or \
+        "already posted" in app.cloud_post({"youtube": yt})["skipped"]
+    assert len(yt.calls) == 2 and yt.calls[0]["meta"]["title"].endswith("#Shorts")
+    done = app.state.kv_get("drive_done")
+    assert done["1DriveFileIdXYZ"] == "posted" and done[L.link_id("https://example.com/first.mp4")] == "posted"
+
+
+def test_youtube_in_the_cloud_never_waits_for_a_browser(tmp_path, monkeypatch):
+    pytest.importorskip("google_auth_oauthlib")
+    from reeler.uploaders.youtube import YouTubeUploader
+    monkeypatch.setenv("CI", "true")
+    cfg = make_cfg(tmp_path, platforms=["youtube"])
+    with pytest.raises(RuntimeError, match="YOUTUBE_TOKEN_JSON"):
+        YouTubeUploader(cfg)._credentials()
+
+
+def test_cloud_youtube_config_loads():
+    cfg = load_config(Path(__file__).resolve().parent.parent / "config.youtube-cloud.yaml")
+    assert cfg.platforms == ["youtube"] and cfg.links.file == "queue/links.txt" and cfg.order == "queue"
+    assert len(cfg.schedule.post_times) == 5

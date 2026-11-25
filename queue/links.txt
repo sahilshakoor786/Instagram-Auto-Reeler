@@ -1,0 +1,4 @@
+# Videos for the cloud YouTube poster: one link per line. New lines get posted in this order.
+# Works with: Google Drive file or folder links, Dropbox links, direct .mp4 links,
+# and YouTube / TikTok / Instagram links (only post videos you own or have permission to use).
+# Each video is posted once. You can leave posted lines here; they are skipped.

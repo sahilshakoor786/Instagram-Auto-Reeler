@@ -1,0 +1,34 @@
+# Cloud mode for YouTube Shorts: GitHub runs this 5 times a day (.github/workflows/youtube-cloud.yml),
+# so your PC can be off. Videos come from the links in queue/links.txt (and the Drive folder below).
+
+preset: gta6                     # topic: change to another preset, or replace with  niche: "your topic"
+platforms: [youtube]
+
+links:
+  file: queue/links.txt          # paste links in a Claude chat and they are added here
+drive:
+  folder: ""                     # optional: a whole Google Drive folder shared "Anyone with the link"
+  manifest: ""
+
+order: queue                     # post links in the order they were added
+videos_dir: ./.cache/videos      # temporary downloads on GitHub's server
+work_dir: ./.cache/work
+state_file: ./state/youtube_cloud.db   # posting history, saved back to the repo after every run
+after_post: delete
+
+schedule:
+  timezone: Asia/Kolkata
+  post_times: ["09:45", "12:45", "15:45", "18:45", "21:45"]
+  max_posts_per_day: 5
+  min_gap_minutes: 90
+
+youtube:
+  privacy: public
+  category_id: "20"              # Gaming
+
+ai:
+  enabled: true                  # uses the ANTHROPIC_API_KEY secret if you add one (optional)
+audio:
+  mode: "off"
+trends:
+  live_research: false
