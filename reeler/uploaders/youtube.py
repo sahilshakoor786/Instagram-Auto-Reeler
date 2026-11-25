@@ -11,6 +11,7 @@ YouTube's (free) API compliance audit stay PRIVATE. See README -> "Turn on YouTu
 from __future__ import annotations
 
 import logging
+import os
 import re
 import time
 from pathlib import Path
@@ -29,6 +30,13 @@ SETUP_HELP = """
 YouTube is not connected yet: the file '{file}' is missing.
 Follow README -> "Turn on YouTube Shorts" (about 10 minutes, one time), put client_secret.json
 in the project folder, then start again.
+"""
+
+
+CLOUD_HELP = """
+No working YouTube login in the cloud. On your PC, open .reeler\\<project>\\youtube_token.json with
+Notepad, copy everything, and paste it into GitHub -> Settings -> Secrets and variables -> Actions ->
+YOUTUBE_TOKEN_JSON. (If it stopped working after ~7 days: publish the app in Google Cloud, see README.)
 """
 
 
@@ -102,6 +110,8 @@ class YouTubeUploader(Uploader):
                 return creds
             except Exception as exc:  # noqa: BLE001
                 log.info("YouTube sign-in expired (%s) - signing in again", exc)
+        if os.environ.get("CI"):  # cloud run: nobody can click "Allow" in a browser here
+            raise RuntimeError(CLOUD_HELP)
         if not self.secrets_file.exists():
             raise RuntimeError(SETUP_HELP.format(file=self.secrets_file.name))
         print("\nA browser window is opening: sign in to Google and choose the YouTube channel to post to.")

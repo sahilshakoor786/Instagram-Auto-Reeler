@@ -89,6 +89,33 @@ how many uploads a new Google project can make per day, so keep the number per d
 
 ---
 
+## ☁️ YouTube Shorts with your PC off
+
+GitHub's servers post **5 Shorts a day** for you (09:43, 12:43, 15:43, 18:43, 21:43 India time).
+Your PC can be off.
+
+**Adding videos:** paste links in a Claude chat ("add these to my YouTube queue"), or add them
+yourself on GitHub in the file `queue/links.txt`, one per line. These work: Google Drive file or
+folder links (shared "Anyone with the link"), Dropbox links, direct .mp4 links, and
+YouTube/TikTok/Instagram links. Only use videos you own or have permission to post. Each video is
+posted once.
+
+**One-time setup:**
+1. In Google Cloud, open **Google Auth Platform → Audience** and click **Publish app**. (If it's
+   grey, fill *App name* and *Developer contact email* on the **Branding** page and Save first.)
+   Without this, Google logs the cloud out after 7 days.
+2. On your PC, delete `.reeler\<project>\youtube_token.json`, then start `START_HERE.bat` once and
+   click **Allow** in the Google window. That makes a fresh, long-lasting login.
+3. Open that `youtube_token.json` with Notepad and copy everything (Ctrl+A, Ctrl+C).
+4. On GitHub: your project → **Settings → Secrets and variables → Actions → New repository secret**.
+   Name: `YOUTUBE_TOKEN_JSON`, Secret: paste (Ctrl+V) → **Add secret**.
+   (Never paste it into a chat.)
+5. Test it: **Actions → Cloud YouTube Shorts → Run workflow** → **Run**. Green tick = it posted.
+
+Settings (topic, times) are in `config.youtube-cloud.yaml`. History is saved in `state/youtube_cloud.db`.
+
+---
+
 ## ⬆️ Updating from the old GTA-only version
 
 1. Close the black window if it is running.

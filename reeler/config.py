@@ -100,6 +100,9 @@ DEFAULTS: dict[str, Any] = {
         "seed_file": "",        # optional YAML of seed hashtags (see reeler/data/gta6_tags.yaml)
         "discovery_hints": [],  # words a discovered trending tag must contain (default: niche words)
     },
+    "links": {
+        "file": "",  # optional text file with one video link per line (cloud queue, e.g. queue/links.txt)
+    },
     "drive": {
         "folder": "",  # Google Drive folder link or ID (shared "Anyone with the link")
         "manifest": "",  # optional committed snapshot of the folder listing
