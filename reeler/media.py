@@ -184,7 +184,7 @@ def render_reel(
     graph = ";".join(chain)
 
     duration = min(info.duration or max_duration, max_duration)
-    cmd = ["ffmpeg", "-y", "-hide_banner", "-loglevel", "error", "-i", str(src.resolve())]
+    cmd = ["ffmpeg", "-nostdin", "-y", "-hide_banner", "-loglevel", "error", "-i", str(src.resolve())]
     if not info.has_audio:
         cmd += ["-f", "lavfi", "-i", "anullsrc=channel_layout=stereo:sample_rate=48000"]
     cmd += [
@@ -215,7 +215,7 @@ def extract_frames(src: Path, out_dir: Path, count: int = 6, width: int = 768) -
         t = dur * (i + 0.5) / count
         fp = out_dir / f"frame_{i:02d}.jpg"
         _run([
-            "ffmpeg", "-y", "-hide_banner", "-loglevel", "error", "-ss", f"{t:.2f}", "-i", str(src),
+            "ffmpeg", "-nostdin", "-y", "-hide_banner", "-loglevel", "error", "-ss", f"{t:.2f}", "-i", str(src),
             "-frames:v", "1", "-vf", f"scale={width}:-2", "-q:v", "4", str(fp),
         ])
         frames.append((round(t, 2), fp))
@@ -224,7 +224,7 @@ def extract_frames(src: Path, out_dir: Path, count: int = 6, width: int = 768) -
 
 def grab_cover(src: Path, dst: Path, t: float) -> Path:
     _run([
-        "ffmpeg", "-y", "-hide_banner", "-loglevel", "error", "-ss", f"{max(t, 0):.2f}", "-i", str(src),
+        "ffmpeg", "-nostdin", "-y", "-hide_banner", "-loglevel", "error", "-ss", f"{max(t, 0):.2f}", "-i", str(src),
         "-frames:v", "1", "-q:v", "2", str(dst),
     ])
     return dst
@@ -236,7 +236,7 @@ def energy_stats(src: Path) -> dict:
     stats = {"duration": round(info.duration, 2), "scene_cuts_per_sec": 0.0, "mean_volume_db": None}
     try:
         proc = subprocess.run(
-            ["ffmpeg", "-hide_banner", "-i", str(src), "-vf", "select='gt(scene,0.25)',showinfo",
+            ["ffmpeg", "-nostdin", "-hide_banner", "-i", str(src), "-vf", "select='gt(scene,0.25)',showinfo",
              "-an", "-f", "null", os.devnull],
             capture_output=True, text=True, encoding="utf-8", errors="replace",
         )
@@ -247,7 +247,7 @@ def energy_stats(src: Path) -> dict:
     if info.has_audio:
         try:
             proc = subprocess.run(
-                ["ffmpeg", "-hide_banner", "-i", str(src), "-af", "volumedetect", "-vn", "-f", "null", os.devnull],
+                ["ffmpeg", "-nostdin", "-hide_banner", "-i", str(src), "-af", "volumedetect", "-vn", "-f", "null", os.devnull],
                 capture_output=True, text=True, encoding="utf-8", errors="replace",
             )
             m = re.search(r"mean_volume:\s*(-?[\d.]+) dB", proc.stderr)
