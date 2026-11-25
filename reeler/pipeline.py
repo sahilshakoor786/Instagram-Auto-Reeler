@@ -125,6 +125,7 @@ class Reeler:
         say(f"preparing {src.name}: looking at the video ...")
         frames = media.extract_frames(src, clip_dir / "frames", count=int(cfg.ai.frames))
         if analysis is None:
+            say("measuring motion and sound ...")
             stats = media.energy_stats(src)
             if cfg.ai.enabled and _has_api_key(cfg):
                 try:
