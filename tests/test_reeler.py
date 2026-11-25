@@ -997,3 +997,11 @@ def test_setup_questions_create_and_reuse_a_project(tmp_path, monkeypatch, capsy
     # a second project sits next to it
     name3 = P.choose_profile(script(["n", "cars", link, "car repairs", "3", "1"]), root)
     assert P.list_profiles(root) == ["cars", "my-cooking"] and name3 == "cars"
+
+
+def test_youtube_finds_key_file_with_googles_own_name(tmp_path):
+    from reeler.uploaders.youtube import YouTubeUploader
+    cfg = make_cfg(tmp_path, platforms=["youtube"])
+    f = tmp_path / "client_secret_1042-abc.apps.googleusercontent.com.json"
+    f.write_text("{}")
+    assert YouTubeUploader(cfg, service=object()).secrets_file == f

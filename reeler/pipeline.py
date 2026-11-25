@@ -22,6 +22,11 @@ from reeler.state import State
 log = logging.getLogger(__name__)
 
 
+def say(msg: str) -> None:
+    """Plain progress line for the person watching the window."""
+    print(f"  [{datetime.now():%H:%M}] {msg}", flush=True)
+
+
 class Reeler:
     def __init__(self, cfg):
         self.cfg = cfg
@@ -58,6 +63,7 @@ class Reeler:
     # ---- 1. scan --------------------------------------------------------
     def scan(self) -> tuple[int, int]:
         folder = self.cfg.videos_path
+        say(f"checking the videos in {folder} ...")
         folder.mkdir(parents=True, exist_ok=True)
         posted = self.cfg.posted_path.resolve()
         found = new = 0
@@ -116,6 +122,7 @@ class Reeler:
         trending = [t for t, _ in sorted(((c.tag, c.score) for c in pool.values()), key=lambda x: -x[1])]
 
         analysis = json.loads(row["analysis"]) if row["analysis"] and not reanalyse else None
+        say(f"preparing {src.name}: looking at the video ...")
         frames = media.extract_frames(src, clip_dir / "frames", count=int(cfg.ai.frames))
         if analysis is None:
             stats = media.energy_stats(src)
@@ -144,6 +151,7 @@ class Reeler:
         max_duration = float(v.max_duration)
         if "youtube" in cfg.platforms:  # Shorts must stay within YouTube's limit
             max_duration = min(max_duration, float(cfg.youtube.max_seconds))
+        say("making it vertical with the hook text (this can take a few minutes) ...")
         media.render_reel(
             src, render_path, width=v.width, height=v.height, fps=v.fps, fit=v.fit,
             max_duration=max_duration, crf=v.crf, audio_bitrate=v.audio_bitrate,
@@ -212,6 +220,7 @@ class Reeler:
                 from reeler.uploaders.youtube import youtube_metadata
                 extra["meta"] = youtube_metadata(analysis, row["caption"] or "", json.loads(row["hashtags"] or "[]"),
                                                  self.cfg)
+            say(f"uploading to {platform} ..." + (" (adding music can take a few minutes)" if audio else ""))
             try:
                 res = up.upload(
                     Path(row["processed"]), row["caption"], cover=Path(row["cover"]) if row["cover"] else None,
@@ -360,6 +369,7 @@ class Reeler:
             try:
                 if not local.exists():
                     log.info("downloading %s from Drive", f["name"])
+                    say(f"downloading {f['name']} from Google Drive ...")
                     gdrive.download(f["id"], local)
                 media.probe(local)
                 vid, _ = self.state.upsert_video(local)

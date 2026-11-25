@@ -228,7 +228,7 @@ def ask_platforms(ask: Ask, root: Path, current: dict | None = None) -> list[str
     ans = _ask_until(ask, f"  1, 2 or 3 [Enter = {cur_key}]: ", lambda a: a in PLATFORM_CHOICES,
                      "  Please type 1, 2 or 3.", cur_key)
     plats = PLATFORM_CHOICES[ans]
-    if "youtube" in plats and not (root / "client_secret.json").exists():
+    if "youtube" in plats and not any(p.is_file() for p in root.glob("client_secret*.json*")):
         print("\n  YouTube needs a one-time setup first (about 10 minutes):")
         print("  open README.md -> 'Turn on YouTube Shorts', then put client_secret.json in this folder.")
         if "instagram" in plats:
