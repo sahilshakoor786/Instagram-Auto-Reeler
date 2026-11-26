@@ -40,6 +40,19 @@ YOUTUBE_TOKEN_JSON. (If it stopped working after ~7 days: publish the app in Goo
 """
 
 
+CONNECT_TRIES = 4
+
+
+def _connection_problem(exc: BaseException) -> bool:
+    """Dropped / reset / timed-out connections (worth a retry on a fresh connection)."""
+    if isinstance(exc, (ConnectionError, TimeoutError)):
+        return True
+    if isinstance(exc, OSError) and getattr(exc, "winerror", None) in (10053, 10054, 10060):
+        return True
+    name = type(exc).__name__.lower()
+    return any(k in name for k in ("timeout", "connection", "remotedisconnected", "brokenpipe", "servernotfound"))
+
+
 def _clean(text: str) -> str:
     return re.sub(r"[<>]", "", text or "").strip()
 
@@ -85,6 +98,7 @@ class YouTubeUploader(Uploader):
         self.token_file = cfg.work_path / "youtube_token.json"
         self.secrets_file = find_client_secrets(cfg)
         self._service = service
+        self._injected = service is not None  # tests pass a fake service; keep it
 
     # ---- sign-in -------------------------------------------------------------
     def _credentials(self):
@@ -145,16 +159,8 @@ class YouTubeUploader(Uploader):
         from googleapiclient.http import MediaFileUpload
         return MediaFileUpload(str(video), mimetype="video/mp4", chunksize=8 * 1024 * 1024, resumable=True)
 
-    def upload(self, video, caption, *, cover=None, thumb_offset_ms=None, audio=None, meta=None) -> UploadResult:
-        yt = self.cfg.youtube
-        meta = meta or youtube_metadata({"caption": caption}, caption, [], self.cfg)
-        privacy = str(yt.privacy or "public").lower()
-        body = {
-            "snippet": {"title": meta["title"], "description": meta["description"], "tags": meta["tags"],
-                        "categoryId": meta.get("category_id") or str(yt.category_id)},
-            "status": {"privacyStatus": privacy, "selfDeclaredMadeForKids": bool(yt.made_for_kids)},
-        }
-        media = self._media(Path(video))
+    def _insert(self, video: Path, body: dict, yt) -> dict:
+        media = self._media(video)
         try:
             request = self.service.videos().insert(part="snippet,status", body=body, media_body=media,
                                                    notifySubscribers=bool(yt.notify_subscribers))
@@ -169,6 +175,7 @@ class YouTubeUploader(Uploader):
                     if status not in (500, 502, 503, 504) or tries > 5:
                         raise
                     time.sleep(2 ** tries)
+            return response
         finally:
             fd = getattr(media, "_fd", None)  # release the file so Windows can delete it afterwards
             if fd is not None:
@@ -176,6 +183,28 @@ class YouTubeUploader(Uploader):
                     fd.close()
                 except OSError:
                     pass
+
+    def upload(self, video, caption, *, cover=None, thumb_offset_ms=None, audio=None, meta=None) -> UploadResult:
+        yt = self.cfg.youtube
+        meta = meta or youtube_metadata({"caption": caption}, caption, [], self.cfg)
+        privacy = str(yt.privacy or "public").lower()
+        body = {
+            "snippet": {"title": meta["title"], "description": meta["description"], "tags": meta["tags"],
+                        "categoryId": meta.get("category_id") or str(yt.category_id)},
+            "status": {"privacyStatus": privacy, "selfDeclaredMadeForKids": bool(yt.made_for_kids)},
+        }
+        response = None
+        for attempt in range(1, CONNECT_TRIES + 1):
+            if not self._injected:
+                self._service = None  # fresh connection every upload: idle ones get cut off (WinError 10053)
+            try:
+                response = self._insert(Path(video), body, yt)
+                break
+            except Exception as exc:  # noqa: BLE001
+                if not _connection_problem(exc) or attempt == CONNECT_TRIES:
+                    raise
+                log.warning("YouTube connection dropped (%s) - retrying (%d/%d)", exc, attempt, CONNECT_TRIES)
+                time.sleep(10 * attempt)
         vid = response["id"]
         notes = []
         got = ((response.get("status") or {}).get("privacyStatus") or privacy).lower()

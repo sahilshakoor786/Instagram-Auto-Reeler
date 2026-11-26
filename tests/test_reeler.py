@@ -1074,3 +1074,49 @@ def test_cloud_youtube_config_loads():
     cfg = load_config(Path(__file__).resolve().parent.parent / "config.youtube-cloud.yaml")
     assert cfg.platforms == ["youtube"] and cfg.links.file == "queue/links.txt" and cfg.order == "queue"
     assert len(cfg.schedule.post_times) == 5
+
+
+def test_youtube_retries_on_a_fresh_connection_after_a_drop(tmp_path, monkeypatch):
+    from reeler.uploaders import youtube as Y
+
+    cfg = make_cfg(tmp_path, platforms=["youtube"])
+    built = []
+
+    class Svc(_FakeYT):
+        pass
+
+    def make_service():
+        built.append(1)
+        svc = Svc()
+        if len(built) == 1:  # the first (old) connection was cut off while idle
+            def broken_videos():
+                class V:
+                    def insert(self, **kw):
+                        class R:
+                            def next_chunk(self):
+                                raise ConnectionAbortedError(10053, "An established connection was aborted")
+                        return R()
+                return V()
+            svc.videos = broken_videos
+        return svc
+
+    up = Y.YouTubeUploader(cfg)
+    monkeypatch.setattr(Y.YouTubeUploader, "service", property(lambda self: self._service or
+                                                                setattr(self, "_service", make_service()) or self._service))
+    monkeypatch.setattr(Y.time, "sleep", lambda s: None)
+    video = tmp_path / "r.mp4"
+    video.write_bytes(b"0" * 100)
+
+    class FakeMedia:
+        def __init__(self, path):
+            self._fd = open(path, "rb")
+
+    monkeypatch.setattr(up, "_media", lambda v: FakeMedia(v))
+    res = up.upload(video, "cap", meta=Y.youtube_metadata({"title": "t"}, "cap", [], cfg))
+    assert res.media_id == "yt123" and len(built) == 2
+
+
+def test_other_youtube_errors_are_not_retried():
+    from reeler.uploaders.youtube import _connection_problem
+    assert _connection_problem(ConnectionAbortedError(10053, "aborted"))
+    assert not _connection_problem(ValueError("quotaExceeded"))
